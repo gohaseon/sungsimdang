@@ -869,17 +869,42 @@ function renderModalList() {
   const customHTML = customItems.length > 0 ? `
     <div class="mb-1">
       <div class="px-5 py-2 bg-green-50 text-xs font-black text-green-700 uppercase tracking-wide">➕ 사용자 추가 메뉴</div>
-      <div class="px-5">${customItems.map(item => `
-        <div class="flex items-center gap-2 py-2.5 border-b border-gray-50 last:border-0">
-          <span class="text-xl w-7 text-center flex-shrink-0">${item.emoji || '🍞'}</span>
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-bold text-gray-800">${item.name}</div>
-            <span class="text-xs text-amber-500 font-bold">${fmt(item.price)}</span>
-            <span class="text-xs text-gray-400 ml-1">${BASE_MENU.find(c=>c.id===item.catId)?.name || item.catId}</span>
+      <div class="px-5">${customItems.map(item => {
+        const isEditing = S.editingItemId === item.id;
+        const editForm = isEditing ? `
+          <div class="mt-2 space-y-2">
+            <div class="flex gap-2">
+              <input id="edit-emoji-${item.id}" value="${item.emoji || '🍞'}" maxlength="4"
+                class="w-14 border border-gray-200 rounded-lg px-2 py-1.5 text-center text-lg focus:outline-none focus:ring-2 focus:ring-amber-300">
+              <input id="edit-name-${item.id}" value="${item.name}" placeholder="이름"
+                class="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300">
+              <input id="edit-price-${item.id}" type="number" value="${item.price || ''}" placeholder="가격"
+                class="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300">
+            </div>
+            <input id="edit-desc-${item.id}" value="${item.desc || ''}" placeholder="설명 (선택)"
+              class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300">
+            <div class="flex gap-2">
+              <button onclick="saveItemEdit('${item.id}')" class="flex-1 bg-amber-400 hover:bg-amber-500 text-white font-black rounded-lg py-1.5 text-sm transition">저장</button>
+              <button onclick="cancelEdit()" class="px-4 bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold rounded-lg py-1.5 text-sm transition">취소</button>
+            </div>
+          </div>` : '';
+        return `
+        <div class="py-2.5 border-b border-gray-50 last:border-0">
+          <div class="flex items-center gap-2">
+            <span class="text-xl w-7 text-center flex-shrink-0">${item.emoji || '🍞'}</span>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-bold text-gray-800">${item.name}</div>
+              <span class="text-xs text-amber-500 font-bold">${fmt(item.price)}</span>
+              <span class="text-xs text-gray-400 ml-1">${BASE_MENU.find(c=>c.id===item.catId)?.name || item.catId}</span>
+            </div>
+            <button onclick="startEdit('${item.id}')"
+              class="flex-shrink-0 text-xs bg-gray-100 hover:bg-amber-100 text-gray-500 hover:text-amber-700 px-2.5 py-1.5 rounded-lg font-bold transition">수정</button>
+            <button onclick="removeCustomItem('${item.id}')"
+              class="flex-shrink-0 text-xs bg-red-50 hover:bg-red-100 text-red-400 px-2.5 py-1.5 rounded-lg font-bold transition">삭제</button>
           </div>
-          <button onclick="removeCustomItem('${item.id}')"
-            class="flex-shrink-0 text-xs bg-red-50 hover:bg-red-100 text-red-400 px-2.5 py-1.5 rounded-lg font-bold transition">삭제</button>
-        </div>`).join('')}
+          ${editForm}
+        </div>`;
+      }).join('')}
       </div>
     </div>` : '';
 
@@ -961,8 +986,14 @@ function saveItemEdit(itemId) {
   const emoji = document.getElementById(`edit-emoji-${itemId}`)?.value.trim() || '🍞';
   const desc  = document.getElementById(`edit-desc-${itemId}`)?.value.trim() || '';
   if (!name) { toast('이름을 입력해주세요'); return; }
-  if (!S.menuChanges.overrides) S.menuChanges.overrides = {};
-  S.menuChanges.overrides[itemId] = { name, price, emoji, desc };
+  // customItem이면 직접 수정, 기본 메뉴면 override
+  const customIdx = S.menuChanges.customItems.findIndex(i => i.id === itemId);
+  if (customIdx >= 0) {
+    S.menuChanges.customItems[customIdx] = { ...S.menuChanges.customItems[customIdx], name, price, emoji, desc };
+  } else {
+    if (!S.menuChanges.overrides) S.menuChanges.overrides = {};
+    S.menuChanges.overrides[itemId] = { name, price, emoji, desc };
+  }
   S.editingItemId = null;
   pushMenuChange();
   renderMenuList();
