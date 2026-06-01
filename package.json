@@ -1,0 +1,13 @@
+{
+  "name": "sungsimdang-basket",
+  "version": "1.0.0",
+  "description": "성심당 빵 같이 사기",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2"
+  }
+}

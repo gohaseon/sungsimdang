@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>성심당 같이 사자 🍞</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Noto Sans KR', -apple-system, sans-serif; }
+    body { background-color: #fffbeb; }
+    .item-card { transition: all 0.12s ease; }
+    .item-card:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.08); }
+    .item-selected { background: linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%) !important; }
+    .slide-up { animation: slideUp 0.25s ease; }
+    @keyframes slideUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .live-dot { animation: livePulse 1.8s infinite; }
+    @keyframes livePulse { 0%,100% { opacity:1;transform:scale(1); } 50% { opacity:0.5;transform:scale(0.8); } }
+    input[type=number] { -moz-appearance:textfield; }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; }
+    .no-scrollbar::-webkit-scrollbar { display:none; }
+    .no-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
+    ::-webkit-scrollbar { width:3px; height:3px; }
+    ::-webkit-scrollbar-thumb { background:#fbbf24; border-radius:2px; }
+    #main-screen { height:100dvh; }
+    .modal-sheet { transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1); }
+    .hidden-item { opacity: 0.45; }
+    .tag-badge { font-size: 10px; padding: 1px 6px; border-radius: 999px; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<!-- ========== LANDING ========== -->
+<div id="landing-screen" class="min-h-screen flex flex-col items-center justify-center p-4 py-10">
+  <div class="w-full max-w-sm">
+    <div class="text-center mb-8 slide-up">
+      <div class="text-7xl mb-3">🍞</div>
+      <h1 class="text-3xl font-black text-amber-900 tracking-tight">성심당 같이 사자!</h1>
+      <p class="text-amber-600 mt-2 text-sm">친구들과 빵 목록을 함께 골라봐요</p>
+    </div>
+    <div class="bg-white rounded-3xl shadow-xl p-6 space-y-5 slide-up">
+      <div>
+        <label class="block text-xs font-bold text-amber-700 mb-1.5 uppercase tracking-wide">내 이름</label>
+        <input id="input-name" type="text" placeholder="예) 홍길동" maxlength="10" autocomplete="off"
+          class="w-full border-2 border-amber-100 rounded-2xl px-4 py-3 text-gray-800 focus:outline-none focus:border-amber-400 transition text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-amber-700 mb-1.5 uppercase tracking-wide">예산</label>
+        <div class="relative">
+          <input id="input-budget" type="number" placeholder="30000" min="0" step="1000"
+            class="w-full border-2 border-amber-100 rounded-2xl px-4 py-3 pr-12 text-gray-800 focus:outline-none focus:border-amber-400 transition text-sm">
+          <span class="absolute right-4 top-1/2 -translate-y-1/2 text-amber-500 font-bold text-sm">원</span>
+        </div>
+        <div class="flex gap-2 mt-2">
+          <button onclick="setBudgetPreset(10000)" class="flex-1 text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 py-1.5 rounded-xl font-bold transition">1만</button>
+          <button onclick="setBudgetPreset(20000)" class="flex-1 text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 py-1.5 rounded-xl font-bold transition">2만</button>
+          <button onclick="setBudgetPreset(30000)" class="flex-1 text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 py-1.5 rounded-xl font-bold transition">3만</button>
+          <button onclick="setBudgetPreset(50000)" class="flex-1 text-xs bg-amber-50 hover:bg-amber-100 text-amber-700 py-1.5 rounded-xl font-bold transition">5만</button>
+        </div>
+      </div>
+      <hr class="border-amber-100">
+      <button onclick="createRoom()"
+        class="w-full bg-amber-400 hover:bg-amber-500 active:bg-amber-600 text-white font-black py-4 rounded-2xl transition text-base shadow-md shadow-amber-200">
+        🎉 새 방 만들기
+      </button>
+      <div class="flex items-center gap-3">
+        <hr class="flex-1 border-amber-100">
+        <span class="text-amber-300 text-xs font-bold">또는</span>
+        <hr class="flex-1 border-amber-100">
+      </div>
+      <div class="flex gap-2">
+        <input id="input-roomcode" type="text" placeholder="방 코드 입력" maxlength="6"
+          class="flex-1 border-2 border-amber-100 rounded-2xl px-4 py-3 text-center font-mono font-black text-lg tracking-widest text-amber-900 focus:outline-none focus:border-amber-400 transition uppercase"
+          oninput="this.value=this.value.toUpperCase()">
+        <button onclick="joinRoom()"
+          class="bg-amber-100 hover:bg-amber-200 active:bg-amber-300 text-amber-800 font-black px-5 rounded-2xl transition text-sm">
+          참여
+        </button>
+      </div>
+      <p id="landing-error" class="text-red-400 text-sm text-center font-bold hidden"></p>
+    </div>
+    <p class="text-center text-amber-300 text-xs mt-5">※ 메뉴 가격은 실제와 다를 수 있습니다</p>
+  </div>
+</div>
+
+<!-- ========== MAIN SCREEN ========== -->
+<div id="main-screen" class="hidden flex flex-col overflow-hidden">
+  <!-- Header -->
+  <div class="bg-amber-400 text-white px-4 flex-shrink-0" style="padding-top: max(env(safe-area-inset-top),12px); padding-bottom:12px;">
+    <div class="flex items-start justify-between mb-3">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="font-black text-lg">🍞 성심당</span>
+          <span id="conn-dot" class="live-dot w-2 h-2 rounded-full bg-white/40 inline-block"></span>
+        </div>
+        <div class="flex items-center gap-2 mt-0.5">
+          <span class="text-amber-100 text-xs">방 코드</span>
+          <button id="room-code-btn" onclick="copyShareLink()"
+            class="bg-white/20 hover:bg-white/30 font-mono font-black text-sm px-3 py-0.5 rounded-lg tracking-widest transition active:scale-95">
+            ------
+          </button>
+          <span id="copy-toast" class="text-xs text-amber-100 opacity-0 transition-all duration-300">✓ 복사됨</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-1">
+        <div id="users-avatars" class="flex -space-x-2"></div>
+        <button onclick="openMenuModal()"
+          class="w-9 h-9 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center text-base transition active:scale-95"
+          title="메뉴 관리">✏️</button>
+      </div>
+    </div>
+    <!-- Budget bar -->
+    <div class="bg-white/15 rounded-2xl p-3">
+      <div class="flex justify-between items-baseline mb-1.5">
+        <span class="text-sm font-bold">내 합계</span>
+        <span id="my-total-display" class="text-base font-black">0원</span>
+      </div>
+      <div class="bg-white/25 rounded-full h-2 overflow-hidden">
+        <div id="budget-bar" class="h-full rounded-full bg-white transition-all duration-500" style="width:0%"></div>
+      </div>
+      <div class="flex justify-between mt-1.5">
+        <span id="budget-status" class="text-xs text-amber-100"></span>
+        <span id="my-budget-display" class="text-xs text-amber-100">예산: 설정 안 함</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="bg-white border-b border-amber-100 flex-shrink-0">
+    <div class="flex">
+      <button id="tab-menu" onclick="setTab('menu')"
+        class="flex-1 py-3 text-sm font-bold border-b-2 text-amber-600 border-amber-400 transition">
+        메뉴 고르기
+      </button>
+      <button id="tab-friends" onclick="setTab('friends')"
+        class="flex-1 py-3 text-sm font-bold border-b-2 text-gray-400 border-transparent transition flex items-center justify-center gap-1.5">
+        친구들 장바구니
+        <span id="friends-badge" class="bg-amber-100 text-amber-700 text-xs font-black px-2 py-0.5 rounded-full hidden">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Menu Panel -->
+  <div id="panel-menu" class="flex-1 flex flex-col overflow-hidden">
+    <div class="bg-amber-50 px-4 py-3 flex-shrink-0">
+      <div id="category-filters" class="flex gap-2 overflow-x-auto no-scrollbar pb-0.5"></div>
+    </div>
+    <div id="menu-list" class="flex-1 overflow-y-auto px-4 pb-6 space-y-6 pt-2"></div>
+  </div>
+
+  <!-- Friends Panel -->
+  <div id="panel-friends" class="hidden flex-1 overflow-y-auto">
+    <div id="friends-list" class="p-4 space-y-3"></div>
+  </div>
+</div>
+
+<!-- ========== MENU MANAGEMENT MODAL ========== -->
+<div id="menu-modal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeMenuModal()"></div>
+  <div class="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl flex flex-col modal-sheet" style="max-height:90dvh;">
+    <!-- Modal header -->
+    <div class="flex-shrink-0 flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-100">
+      <h2 class="font-black text-gray-800 text-lg">✏️ 메뉴 관리</h2>
+      <button onclick="closeMenuModal()" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 text-2xl leading-none transition">×</button>
+    </div>
+    <!-- Modal sub-tabs -->
+    <div class="flex-shrink-0 flex border-b border-gray-100">
+      <button id="modal-tab-list" onclick="setModalTab('list')"
+        class="flex-1 py-2.5 text-sm font-bold text-amber-600 border-b-2 border-amber-400 transition">
+        목록 수정
+      </button>
+      <button id="modal-tab-add" onclick="setModalTab('add')"
+        class="flex-1 py-2.5 text-sm font-bold text-gray-400 border-b-2 border-transparent transition">
+        + 메뉴 추가
+      </button>
+    </div>
+    <!-- Modal content -->
+    <div id="modal-content" class="flex-1 overflow-y-auto"></div>
+  </div>
+</div>
+
+<!-- ========== TOAST ========== -->
+<div id="toast-container" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 space-y-2 pointer-events-none flex flex-col items-center"></div>
+
+<script>
+// ==================== BASE MENU (성심당 메뉴.txt 기반) ====================
+const BASE_MENU = [
+  {
+    id: 'signature', name: '⭐ 시그니처',
+    items: [
+      { id: 'tuigim-soboro',   name: '튀김소보로',           price: 1700, emoji: '🍩', desc: '성심당 대표 빵' },
+      { id: 'tuso-guma',       name: '튀소구마',             price: 1700, emoji: '🍠', desc: '고구마 튀김소보로' },
+      { id: 'pantarong',       name: '판타롱부추빵',         price: 2000, emoji: '🥬', desc: '부추 듬뿍' },
+    ]
+  },
+  {
+    id: 'regular', name: '🍞 일반빵',
+    items: [
+      { id: 'toyo',            name: '토요빵',               price: 3800, emoji: '🍞', desc: '자색고구마·타피오카' },
+      { id: 'walnut-bread',    name: '월넛브레드',           price: 4000, emoji: '🌰', desc: '호두 듬뿍' },
+      { id: 'squid-stick',     name: '오징어먹물방망이',     price: 3300, emoji: '🦑', desc: '크림치즈·연유크림' },
+      { id: 'cream-white',     name: '크림치즈화이트번',     price: 3300, emoji: '🫐', desc: '블루베리 크림' },
+      { id: 'danpat',          name: '단팥빵',               price: 1700, emoji: '🫘', desc: '통팥·호두·밤' },
+      { id: 'soboro',          name: '소보로',               price: 1300, emoji: '🍞', desc: '땅콩버터 크런치' },
+      { id: 'sunflower',       name: '해바라기',             price: 2000, emoji: '🌻', desc: '소시지 야채 피자빵' },
+      { id: 'steak-bread',     name: '스테이크빵',           price: 2300, emoji: '🥩', desc: '너비아니 야채 피자빵' },
+      { id: 'pangore',         name: '팡오레',               price: 2000, emoji: '🌽', desc: '고소한 옥수수빵' },
+      { id: 'bigmatch',        name: '빅매치',               price: 2300, emoji: '🍪', desc: '크림치즈·메이플시럽' },
+      { id: 'matcha-cream',    name: '말차순크림빵',         price: 3000, emoji: '🍵', desc: '말차 생크림', tag: '현장구매' },
+      { id: 'cacao-sunjeong',  name: '카카오순정',           price: 3000, emoji: '🍫', desc: '리얼 초콜릿', tag: '현장구매' },
+      { id: 'okidoki',         name: '오키도키슈',           price: 3000, emoji: '🐣', desc: '창업60주년 슈크림', tag: '현장구매' },
+      { id: 'matcha-okidoki',  name: '말차 오키도키슈',      price: 4500, emoji: '🍵', desc: '말차 크림 슈', tag: '현장구매' },
+      { id: 'butter-bread',    name: '버터빵',               price: 1700, emoji: '🧈', desc: '크랜베리 버터크림', tag: '현장구매' },
+      { id: 'oborumdal',       name: '오보름달',             price: 2800, emoji: '🌕', desc: '팥배기·완두배기', tag: '현장구매' },
+      { id: 'almond-cream',    name: '아몬드크림빵',         price: 2000, emoji: '🌰', desc: '아몬드 크림', tag: '현장구매' },
+      { id: 'mr-hong',         name: '미스터홍',             price: 2800, emoji: '🍞', desc: '화이트초콜릿·크렌베리', tag: '현장구매' },
+      { id: 'volcano',         name: '볼케이노',             price: 3800, emoji: '🌋', desc: '까망베르·모짜렐라', tag: '현장구매' },
+      { id: 'pope-scone',      name: '교황님의 치즈스콘',    price: 4000, emoji: '🧀', desc: '고다·체다 치즈스콘', tag: '현장구매' },
+      { id: 'anbutter',        name: '성심앙버터',           price: 4000, emoji: '🧈', desc: '바게트·통팥앙금·버터', tag: '현장구매' },
+      { id: 'sim-butter',      name: '심버터라우겐',         price: 3500, emoji: '🥨', desc: '프레첼·프렌치버터', tag: '현장구매' },
+    ]
+  },
+  {
+    id: 'loaf', name: '🍞 식빵',
+    items: [
+      { id: 'mochi-loaf',      name: '모찌모찌식빵',         price: 3500, emoji: '🍞', desc: '유산균 발효 쫄깃' },
+      { id: 'milk-loaf',       name: '순우유식빵',           price: 4000, emoji: '🥛', desc: '밀가루·우유·버터만' },
+      { id: 'morning-bread',   name: '모닝빵',               price: 3000, emoji: '🌅', desc: '아침식사용' },
+      { id: 'chestnut-loaf',   name: '공주알밤식빵',         price: 4000, emoji: '🌰', desc: '달달한 공주알밤' },
+      { id: 'gold-loaf',       name: '황금식빵',             price: 4000, emoji: '✨', desc: '우유향·버터 풍미' },
+      { id: 'bam-loaf',        name: '밤식빵',               price: 5500, emoji: '🌰', desc: '탱글한 밤조각' },
+    ]
+  },
+  {
+    id: 'fried', name: '🍩 도넛/튀김빵',
+    items: [
+      { id: 'kidari-twist',    name: '키다리트위스트',       price: 3000, emoji: '🌀', desc: '9번 꼬아만든 꽈베기' },
+      { id: 'chapsal-donut',   name: '찹쌀도넛',             price: 1500, emoji: '🍩', desc: '통팥 찹쌀도넛' },
+      { id: 'bread-donut',     name: '빵도넛',               price: 1700, emoji: '🍩', desc: '달콤한 통팥 도넛' },
+      { id: 'curry-goroke',    name: '카레고로게',           price: 2800, emoji: '🍛', desc: '수제카레·불고기' },
+      { id: 'veggie-goroke',   name: '야채고로게',           price: 2300, emoji: '🥦', desc: '바삭 야채 고로케' },
+      { id: 'shrimp-nakji',    name: '새우를낙지',           price: 3000, emoji: '🦐', desc: '새우·낙지 고로케' },
+      { id: 'hot-chicken',     name: '핫치킨고로게',         price: 2800, emoji: '🌶️', desc: '매콤 치킨 고로케' },
+      { id: 'tuna-goroke',     name: '참치고로게',           price: 2500, emoji: '🐟', desc: '참치 고로케' },
+      { id: 'milk-goroke',     name: '우유고로게',           price: 2300, emoji: '🥛', desc: '찐우유크림 고로케' },
+      { id: 'mara-goroke',     name: '마라미고로게',         price: 3000, emoji: '🌶️', desc: '마라맛 고로케' },
+      { id: 'chapsal-jumbap',  name: '찹쌀주먹밥',           price: 2300, emoji: '🍙', desc: '국내산 찹쌀 100%' },
+      { id: 'kimchi-jumbap',   name: '김치찹쌀주먹밥',       price: 2300, emoji: '🥘', desc: '매콤 김치볶음밥' },
+    ]
+  },
+  {
+    id: 'pastry', name: '🥐 페스츄리',
+    items: [
+      { id: 'bomun-meari',     name: '보문산메아리',         price: 6000, emoji: '🥂', desc: '대전역 입점 기념빵' },
+      { id: 'small-meari',     name: '작은메아리',           price: 3000, emoji: '🥐', desc: '카라멜·버터 페이스트리' },
+      { id: 'plain-croissant', name: '플레인크로와상',       price: 2800, emoji: '🥐', desc: '프랑스 버터시트' },
+      { id: 'salt-croissant',  name: '소금크롸상',           price: 1800, emoji: '🧂', desc: '겉바속촉 소금크로와상' },
+      { id: 'ham-croissant',   name: '햄치즈크로와상',       price: 3500, emoji: '🧀', desc: '햄·치즈·연유크림' },
+      { id: 'almond-croissant',name: '아몬드크로와상',       price: 3500, emoji: '🌰', desc: '아몬드크림 듬뿍' },
+      { id: 'french-pie',      name: '후렌치파이',           price: 2000, emoji: '🥧', desc: '딸기잼 페스츄리' },
+      { id: 'hwasso',          name: '화쏘브레드',           price: 3500, emoji: '🌶️', desc: '소세지·매콤 할라피뇨' },
+      { id: 'pie-manju',       name: '파이만주세트(8개입)',  price: 9600, emoji: '🎁', desc: '파이+팥앙금 만주 세트' },
+      { id: 'pain-choco',      name: '뺑오쇼콜라',           price: 3000, emoji: '🍫', desc: '초콜릿 페스츄리' },
+    ]
+  },
+  {
+    id: 'healthy', name: '🌾 건강빵',
+    items: [
+      { id: 'red-wine-bread',  name: '레드와인',             price: 4500, emoji: '🍷', desc: '' },
+      { id: 'whole-wheat',     name: '맷돌로갈은통밀빵',     price: 4500, emoji: '🌾', desc: '100% 통밀빵' },
+      { id: 'fig-shadow',      name: '무화과그늘아래',       price: 3000, emoji: '🌿', desc: '' },
+      { id: 'oct-fig',         name: '시월의무화과',         price: 5000, emoji: '🍈', desc: '' },
+      { id: 'noah-raisin',     name: '노아레즌',             price: 7000, emoji: '🍇', desc: '' },
+    ]
+  },
+  {
+    id: 'cake', name: '🎂 케이크',
+    items: [
+      { id: 'shine-melon',     name: '샤인이랑멜론',         price: 37000, emoji: '🍈', desc: '생크림 케이크' },
+      { id: 'mango-mango',     name: '망고망고',             price: 39000, emoji: '🥭', desc: '생크림 케이크' },
+      { id: 'bless-3',         name: '축복 3호',             price: 36000, emoji: '🎂', desc: '생크림 케이크' },
+      { id: 'kirsch-3',        name: '키리쉬 3호',           price: 36000, emoji: '🍒', desc: '생크림 케이크' },
+      { id: 'crepe-15',        name: '열다섯겹크레페 3호',   price: 39000, emoji: '🌀', desc: '15겹 크레페 케이크' },
+      { id: 'yokiyoki',        name: '요키요키',             price: 43000, emoji: '🥝', desc: '요거트·커스터드 키위' },
+      { id: 'strawberry-yogurt',name:'딸기요거케익',         price: 43000, emoji: '🍓', desc: '딸기 요거트 케이크' },
+      { id: 'sp-mousse',       name: '고구마무스 2호',       price: 33000, emoji: '🍠', desc: '무스 케이크' },
+      { id: 'fig-tart',        name: '무화과타르트',         price: 42000, emoji: '🌿', desc: '타르트 케이크' },
+      { id: 'mango-tart',      name: '생망고타르트',         price: 46000, emoji: '🥭', desc: '타르트 케이크' },
+      { id: 'strawberry-tart', name: '딸기타르트 2호',       price: 38000, emoji: '🍓', desc: '타르트 케이크' },
+      { id: 'hello-crepe',     name: '안녕 크레페',          price: 45000, emoji: '🌀', desc: '' },
+      { id: 'matcha-crepe',    name: '말차딸기크레페',       price: 49000, emoji: '🍵', desc: '말차 크레페 케이크' },
+      { id: 'plain-cheese',    name: '플레인치즈케이크',     price: 29000, emoji: '🧀', desc: '치즈케이크' },
+    ]
+  },
+  {
+    id: 'sandwich', name: '🥪 샌드위치',
+    items: [
+      { id: 'meat-hansam',     name: '고기 한쌈 샌드위치',   price: 5000, emoji: '🥪', desc: '소불고기·양배추' },
+      { id: 'yakisoba',        name: '야끼소바빵',           price: 4000, emoji: '🍜', desc: '볶음 우동 샌드위치' },
+      { id: 'jambon-beurre',   name: '잠봉 뵈르 시리즈',    price: 9000, emoji: '🥖', desc: '버터·사과잼·치즈 3종' },
+      { id: 'beef-carne',      name: '비프카르네',           price: 7800, emoji: '🥩', desc: '소고기 스테이크 샌드위치' },
+    ]
+  },
+  {
+    id: 'roll', name: '🌀 롤케이크',
+    items: [
+      { id: 'mango-roll',      name: '망고롤',               price: 18000, emoji: '🥭', desc: '' },
+      { id: 'yoki-roll',       name: '요키롤',               price: 18000, emoji: '🥝', desc: '키위 요거트 롤케이크' },
+    ]
+  },
+  {
+    id: 'dessert', name: '🧁 디저트',
+    items: [
+      { id: 'patbingsu',       name: '전설의 팥빙수',        price: 7000,  emoji: '🍧', desc: '냉면그릇 사이즈 대용량' },
+      { id: 'cup-bingsu',      name: '컵빙수',               price: 3500,  emoji: '🍧', desc: '팥 컵빙수' },
+      { id: 'strawberry-bingsu',name:'딸기 컵빙수',          price: 3500,  emoji: '🍓', desc: '딸기 컵빙수' },
+      { id: 'mango-bingsu',    name: '생망고 컵빙수',        price: 4000,  emoji: '🥭', desc: '생망고 컵빙수' },
+    ]
+  },
+  {
+    id: 'traditional', name: '🎁 전통과자',
+    items: [
+      { id: 'bruz-tteok-16',   name: '부르스떡 대전역(16개입)',price:35000, emoji: '🍡', desc: '오리지날·흑임자·쑥·백년초 4종' },
+      { id: 'bruz-tteok-8',    name: '부르스떡0시50분(8개입)',price: 18000, emoji: '🍡', desc: '' },
+      { id: 'bruz-manju',      name: '대전부르스만주(6구)',   price:  9500, emoji: '🧁', desc: '밤·황남·고구마·유자·흑임자·호박' },
+      { id: 'bruz-yakgwa',     name: '대전부르스약과(5개입)', price:  6500, emoji: '🍯', desc: '' },
+      { id: 'sikhye',          name: '옛맛식혜',             price:  7000, emoji: '☕', desc: '' },
+      { id: 'madeleine-1',     name: '순수마들렌(1호 4개입)', price:  5000, emoji: '🍰', desc: '' },
+      { id: 'choco-madeleine', name: '초코미마들렌 2호',      price: 14000, emoji: '🍫', desc: '' },
+      { id: 'walnut-pound',    name: '호두파운드',           price: 16000, emoji: '🌰', desc: '' },
+    ]
+  },
+  {
+    id: 'mealkit', name: '🍱 밥키트',
+    items: [
+      { id: 'gambas',          name: '3분 감바스',           price: 9000, emoji: '🦐', desc: '' },
+      { id: 'carbonara',       name: '까르보나라',           price: 9000, emoji: '🍝', desc: '' },
+      { id: 'risotto',         name: '풍기크림리조또',       price: 8500, emoji: '🍚', desc: '' },
+      { id: 'flying-pasta',    name: '플라잉팬 파스타',      price: 9500, emoji: '🍝', desc: '' },
+      { id: 'pomodoro',        name: '클래식 뽀모도로',      price: 8500, emoji: '🍅', desc: '' },
+    ]
+  },
+  {
+    id: 'seasonal', name: '🎄 시즌 한정',
+    items: [
+      { id: 'panetone',        name: '파네토네(대)',          price: 21000, emoji: '🎄', desc: '크리스마스 한정' },
+      { id: 'pandoro',         name: '팡도르(대)',            price: 21000, emoji: '⭐', desc: '크리스마스 한정' },
+      { id: 'stollen',         name: '스톨렌(대)',            price: 32000, emoji: '🎁', desc: '크리스마스 한정' },
+      { id: 'dove-bread',      name: '콜롬바부활빵',         price: 21000, emoji: '🕊️', desc: '부활절 한정' },
+      { id: 'nest-bread',      name: '부활둥지빵(대)',        price: 18000, emoji: '🪺', desc: '부활절 한정' },
+    ]
+  },
+];
+
+const BASE_ITEM_MAP = Object.fromEntries(BASE_MENU.flatMap(c => c.items).map(i => [i.id, i]));
+
+// ==================== STATE ====================
+const S = {
+  myId: null, myName: null, myBudget: 0,
+  roomCode: null, myItems: {}, friends: {},
+  ws: null, tab: 'menu', category: 'all',
+  menuChanges: { customItems: [], overrides: {}, hidden: [] },
+  editingItemId: null,   // in modal
+  modalTab: 'list',
+};
+
+// ==================== EFFECTIVE MENU ====================
+function getEffectiveMenu() {
+  const { customItems = [], overrides = {}, hidden = [] } = S.menuChanges;
+  return BASE_MENU.map(cat => ({
+    ...cat,
+    items: [
+      ...cat.items
+        .filter(i => !hidden.includes(i.id))
+        .map(i => overrides[i.id] ? { ...i, ...overrides[i.id] } : i),
+      ...customItems.filter(i => i.catId === cat.id)
+    ]
+  })).filter(cat => cat.items.length > 0);
+}
+
+function getEffectiveItemMap() {
+  const { customItems = [], overrides = {} } = S.menuChanges;
+  const map = {};
+  for (const [id, item] of Object.entries(BASE_ITEM_MAP)) {
+    map[id] = overrides[id] ? { ...item, ...overrides[id] } : item;
+  }
+  for (const item of customItems) map[item.id] = item;
+  return map;
+}
+
+// ==================== UTILS ====================
+const fmt = n => (n || 0).toLocaleString('ko-KR') + '원';
+
+function calcTotal(items) {
+  const imap = getEffectiveItemMap();
+  return Object.entries(items).reduce((s, [id, q]) => s + (imap[id]?.price ?? BASE_ITEM_MAP[id]?.price ?? 0) * q, 0);
+}
+
+function genCode() { return Math.random().toString(36).slice(2, 8).toUpperCase(); }
+function genId()   { return Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
+
+const AVATAR_COLORS = [
+  'bg-rose-400','bg-orange-400','bg-amber-500','bg-lime-500',
+  'bg-teal-400','bg-cyan-500','bg-blue-400','bg-violet-400','bg-pink-400'
+];
+function avatarColor(name) {
+  let h = 0;
+  for (const c of name) h = (h << 5) - h + c.charCodeAt(0);
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+}
+function avatar(name, sz = 'w-9 h-9', tx = 'text-sm') {
+  return `<div class="${sz} rounded-full ${avatarColor(name)} border-2 border-white flex items-center justify-center text-white font-black ${tx} shadow-sm flex-shrink-0" title="${name}">${name[0]}</div>`;
+}
+
+// ==================== WEBSOCKET ====================
+function connect(roomCode, userId, name, budget) {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${proto}//${location.host}`);
+  S.ws = ws;
+  ws.onopen = () => {
+    setConnected(true);
+    ws.send(JSON.stringify({ type: 'join', roomCode, userId, name, budget }));
+  };
+  ws.onmessage = e => onServerMsg(JSON.parse(e.data));
+  ws.onclose = () => { setConnected(false); setTimeout(() => connect(roomCode, userId, name, budget), 3000); };
+  ws.onerror = () => ws.close();
+}
+
+function setConnected(yes) {
+  const dot = document.getElementById('conn-dot');
+  if (!dot) return;
+  dot.className = yes
+    ? 'live-dot w-2 h-2 rounded-full bg-green-300 inline-block'
+    : 'w-2 h-2 rounded-full bg-white/30 inline-block';
+}
+
+function wsend(data) {
+  if (S.ws?.readyState === WebSocket.OPEN) S.ws.send(JSON.stringify(data));
+}
+
+function onServerMsg(msg) {
+  switch (msg.type) {
+    case 'state':
+      S.friends = {};
+      for (const [uid, u] of Object.entries(msg.room.users)) {
+        if (uid !== S.myId) S.friends[uid] = { ...u };
+      }
+      if (msg.room.menu) S.menuChanges = msg.room.menu;
+      renderAll();
+      break;
+    case 'userJoined':
+      if (msg.userId !== S.myId) {
+        S.friends[msg.userId] = { ...msg.user };
+        renderAll();
+        toast(`${msg.user.name}님이 참여했어요! 👋`);
+      }
+      break;
+    case 'itemsUpdated':
+      if (S.friends[msg.userId]) { S.friends[msg.userId].items = msg.items; renderMenuList(); renderFriendsList(); }
+      break;
+    case 'budgetUpdated':
+      if (S.friends[msg.userId]) { S.friends[msg.userId].budget = msg.budget; renderFriendsList(); }
+      break;
+    case 'userLeft': {
+      const name = S.friends[msg.userId]?.name;
+      delete S.friends[msg.userId];
+      renderAll();
+      if (name) toast(`${name}님이 나갔어요`);
+      break;
+    }
+    case 'menuUpdated':
+      S.menuChanges = msg.menu;
+      renderMenuList();
+      renderFriendsList();
+      if (document.getElementById('menu-modal') && !document.getElementById('menu-modal').classList.contains('hidden')) {
+        renderModalContent();
+      }
+      break;
+  }
+}
+
+function pushMenuChange() {
+  wsend({ type: 'updateMenu', menu: S.menuChanges });
+}
+
+// ==================== LANDING ====================
+function setBudgetPreset(v) { document.getElementById('input-budget').value = v; }
+
+function getLandingInputs() {
+  const name = document.getElementById('input-name').value.trim();
+  const budget = parseInt(document.getElementById('input-budget').value) || 0;
+  const err = document.getElementById('landing-error');
+  if (!name) { err.textContent = '이름을 입력해주세요 😊'; err.classList.remove('hidden'); document.getElementById('input-name').focus(); return null; }
+  err.classList.add('hidden');
+  return { name, budget };
+}
+
+function createRoom() { const i = getLandingInputs(); if (i) enterRoom(i.name, i.budget, genCode()); }
+
+function joinRoom() {
+  const i = getLandingInputs(); if (!i) return;
+  const code = document.getElementById('input-roomcode').value.trim().toUpperCase();
+  if (code.length < 4) { const e = document.getElementById('landing-error'); e.textContent = '방 코드를 입력해주세요'; e.classList.remove('hidden'); return; }
+  enterRoom(i.name, i.budget, code);
+}
+
+function enterRoom(name, budget, roomCode) {
+  S.myId = genId(); S.myName = name; S.myBudget = budget;
+  S.roomCode = roomCode; S.myItems = {}; S.friends = {};
+  S.menuChanges = { customItems: [], overrides: {}, hidden: [] };
+  document.getElementById('landing-screen').classList.add('hidden');
+  document.getElementById('main-screen').classList.remove('hidden');
+  document.getElementById('room-code-btn').textContent = roomCode;
+  history.replaceState(null, '', `#${roomCode}`);
+  connect(roomCode, S.myId, name, budget);
+  renderCategoryFilters();
+  renderMenuList();
+  renderBudgetBar();
+  renderUsersAvatars();
+}
+
+// ==================== RENDER ====================
+function renderAll() {
+  renderUsersAvatars(); renderBudgetBar();
+  renderMenuList(); renderFriendsList(); updateFriendsBadge();
+}
+
+function renderUsersAvatars() {
+  const el = document.getElementById('users-avatars'); if (!el) return;
+  const all = [{ name: S.myName }, ...Object.values(S.friends).map(u => ({ name: u.name }))];
+  el.innerHTML = all.map(u => avatar(u.name)).join('');
+}
+
+function renderBudgetBar() {
+  const total = calcTotal(S.myItems);
+  const budget = S.myBudget;
+  const over = budget > 0 && total > budget;
+  const pct = budget > 0 ? Math.min((total / budget) * 100, 100) : 0;
+  const totalEl = document.getElementById('my-total-display');
+  if (!totalEl) return;
+  totalEl.textContent = fmt(total);
+  document.getElementById('budget-bar').style.width = pct + '%';
+  document.getElementById('budget-bar').className = `h-full rounded-full transition-all duration-500 ${over ? 'bg-red-300' : 'bg-white'}`;
+  document.getElementById('my-budget-display').textContent = budget > 0 ? `예산: ${fmt(budget)}` : '예산: 설정 안 함';
+  const statusEl = document.getElementById('budget-status');
+  if (over) { statusEl.textContent = `⚠ ${fmt(total - budget)} 초과`; statusEl.className = 'text-xs text-red-200 font-bold'; }
+  else if (budget > 0) { statusEl.textContent = `✓ ${fmt(budget - total)} 남음`; statusEl.className = 'text-xs text-amber-100'; }
+  else statusEl.textContent = '';
+}
+
+function renderCategoryFilters() {
+  const el = document.getElementById('category-filters'); if (!el) return;
+  const cats = [{ id: 'all', name: '전체' }, ...getEffectiveMenu()];
+  el.innerHTML = cats.map(c => {
+    const active = S.category === c.id;
+    return `<button onclick="setCategory('${c.id}')"
+      class="flex-shrink-0 px-4 py-2 rounded-full text-xs font-black transition whitespace-nowrap
+             ${active ? 'bg-amber-400 text-white shadow-md shadow-amber-200' : 'bg-white text-amber-700 border border-amber-100 hover:border-amber-300'}">
+      ${c.name}
+    </button>`;
+  }).join('');
+}
+
+function renderMenuList() {
+  const el = document.getElementById('menu-list'); if (!el) return;
+  const menu = getEffectiveMenu();
+  const cats = S.category === 'all' ? menu : menu.filter(c => c.id === S.category);
+  el.innerHTML = cats.map(cat => `
+    <div>
+      <h3 class="font-black text-amber-900 text-sm mb-2.5">${cat.name}</h3>
+      <div class="space-y-2">${cat.items.map(renderItemCard).join('')}</div>
+    </div>
+  `).join('') || '<div class="text-center text-amber-300 py-10 text-sm">이 카테고리에 메뉴가 없어요<br>메뉴 관리에서 추가해보세요 ✏️</div>';
+}
+
+function renderItemCard(item) {
+  const qty = S.myItems[item.id] || 0;
+  const selected = qty > 0;
+  const friendsWithItem = Object.values(S.friends).filter(u => (u.items[item.id] || 0) > 0);
+  const friendAvatars = friendsWithItem.map(u =>
+    `<div class="w-5 h-5 rounded-full ${avatarColor(u.name)} border border-white flex items-center justify-center text-white font-black text-xs" title="${u.name}">${u.name[0]}</div>`
+  ).join('');
+  const tagBadge = item.tag ? `<span class="tag-badge bg-amber-100 text-amber-600">${item.tag}</span>` : '';
+  return `
+    <div class="item-card bg-white rounded-2xl border-2 transition cursor-pointer select-none
+                ${selected ? 'border-amber-300 item-selected' : 'border-transparent shadow-sm hover:border-amber-100'}"
+         onclick="toggleItem('${item.id}')">
+      <div class="flex items-center gap-3 p-3.5">
+        <div class="text-3xl leading-none">${item.emoji || '🍞'}</div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="font-bold text-gray-800 text-sm">${item.name}</span>
+            ${tagBadge}
+            ${item.desc ? `<span class="text-xs text-amber-500 bg-amber-50 px-2 py-px rounded-full font-bold">${item.desc}</span>` : ''}
+          </div>
+          <div class="flex items-center gap-2 mt-0.5">
+            <span class="font-black text-amber-500 text-sm">${fmt(item.price)}</span>
+            ${friendAvatars ? `<div class="flex -space-x-1">${friendAvatars}</div>` : ''}
+          </div>
+        </div>
+        ${selected
+          ? `<div class="flex items-center gap-2" onclick="event.stopPropagation()">
+               <button onclick="changeQty('${item.id}',-1)" class="w-8 h-8 rounded-full bg-amber-100 text-amber-700 font-black text-lg flex items-center justify-center hover:bg-amber-200 active:bg-amber-300 transition leading-none">−</button>
+               <span class="font-black text-gray-800 text-sm w-5 text-center">${qty}</span>
+               <button onclick="changeQty('${item.id}',1)"  class="w-8 h-8 rounded-full bg-amber-400 text-white font-black text-lg flex items-center justify-center hover:bg-amber-500 active:bg-amber-600 transition leading-none">+</button>
+             </div>`
+          : `<div class="w-7 h-7 rounded-full border-2 border-amber-100 flex items-center justify-center flex-shrink-0">
+               <div class="w-3 h-3 rounded-full bg-amber-100"></div>
+             </div>`
+        }
+      </div>
+    </div>`;
+}
+
+function renderFriendsList() {
+  const el = document.getElementById('friends-list'); if (!el) return;
+  const imap = getEffectiveItemMap();
+  const all = [
+    { id: S.myId, name: S.myName, budget: S.myBudget, items: S.myItems, isMe: true },
+    ...Object.entries(S.friends).map(([id, u]) => ({ id, ...u, isMe: false }))
+  ];
+  el.innerHTML = all.map(user => {
+    const total = calcTotal(user.items);
+    const over = user.budget > 0 && total > user.budget;
+    const pct = user.budget > 0 ? Math.min((total / user.budget) * 100, 100) : 0;
+    const selectedItems = Object.entries(user.items)
+      .filter(([, q]) => q > 0)
+      .map(([id, qty]) => ({ ...(imap[id] || BASE_ITEM_MAP[id] || { name: id, price: 0, emoji: '🍞' }), qty }));
+    return `
+      <div class="bg-white rounded-2xl p-4 shadow-sm border-2 ${user.isMe ? 'border-amber-200' : 'border-transparent'}">
+        <div class="flex items-center gap-3 mb-3">
+          ${avatar(user.name, 'w-10 h-10', 'text-base')}
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="font-black text-gray-800 text-sm">${user.name}</span>
+              ${user.isMe ? '<span class="text-xs bg-amber-100 text-amber-700 px-2 py-px rounded-full font-black">나</span>' : ''}
+            </div>
+            <div class="text-xs text-gray-400 mt-0.5">${selectedItems.length}개 선택</div>
+          </div>
+          <div class="text-right">
+            <div class="font-black ${over ? 'text-red-500' : 'text-amber-600'}">${fmt(total)}</div>
+            ${over ? `<div class="text-xs text-red-400 font-bold">+${fmt(total - user.budget)}</div>` : ''}
+          </div>
+        </div>
+        ${user.budget > 0 ? `<div class="bg-gray-100 rounded-full h-1.5 mb-3 overflow-hidden"><div class="h-full rounded-full transition-all duration-500 ${over ? 'bg-red-400' : 'bg-amber-400'}" style="width:${pct}%"></div></div>` : ''}
+        ${selectedItems.length > 0
+          ? `<div class="space-y-1.5">${selectedItems.map(item => `
+               <div class="flex items-center justify-between text-sm">
+                 <span class="text-gray-600">${item.emoji || '🍞'} ${item.name} <span class="text-gray-400 font-bold">× ${item.qty}</span></span>
+                 <span class="font-bold text-amber-600 flex-shrink-0 ml-2">${fmt(item.price * item.qty)}</span>
+               </div>`).join('')}
+             </div>`
+          : `<div class="text-center text-gray-300 text-sm py-1">아직 선택한 빵이 없어요</div>`
+        }
+      </div>`;
+  }).join('');
+}
+
+function updateFriendsBadge() {
+  const badge = document.getElementById('friends-badge'); if (!badge) return;
+  const n = Object.keys(S.friends).length;
+  badge.textContent = n; badge.classList.toggle('hidden', n === 0);
+}
+
+// ==================== ACTIONS ====================
+function toggleItem(id) {
+  if (S.myItems[id]) delete S.myItems[id]; else S.myItems[id] = 1;
+  renderMenuList(); renderBudgetBar(); renderFriendsList();
+  wsend({ type: 'updateItems', items: S.myItems });
+}
+
+function changeQty(id, delta) {
+  const n = (S.myItems[id] || 0) + delta;
+  if (n <= 0) delete S.myItems[id]; else S.myItems[id] = Math.min(n, 99);
+  renderMenuList(); renderBudgetBar(); renderFriendsList();
+  wsend({ type: 'updateItems', items: S.myItems });
+}
+
+function setTab(tab) {
+  S.tab = tab;
+  document.getElementById('panel-menu').classList.toggle('hidden', tab !== 'menu');
+  document.getElementById('panel-friends').classList.toggle('hidden', tab !== 'friends');
+  const active = 'flex-1 py-3 text-sm font-bold border-b-2 text-amber-600 border-amber-400 transition';
+  const inact  = 'flex-1 py-3 text-sm font-bold border-b-2 text-gray-400 border-transparent transition flex items-center justify-center gap-1.5';
+  document.getElementById('tab-menu').className    = tab === 'menu'    ? active : inact;
+  document.getElementById('tab-friends').className = tab === 'friends' ? active : inact;
+  const badge = document.getElementById('friends-badge');
+  if (badge && !document.getElementById('tab-friends').contains(badge))
+    document.getElementById('tab-friends').appendChild(badge);
+}
+
+function setCategory(id) {
+  S.category = id; renderCategoryFilters(); renderMenuList();
+}
+
+function copyShareLink() {
+  navigator.clipboard.writeText(`${location.origin}${location.pathname}#${S.roomCode}`).then(() => {
+    const el = document.getElementById('copy-toast');
+    el.style.opacity = '1';
+    setTimeout(() => el.style.opacity = '0', 2000);
+  });
+}
+
+// ==================== MENU MANAGEMENT MODAL ====================
+function openMenuModal() {
+  S.editingItemId = null;
+  document.getElementById('menu-modal').classList.remove('hidden');
+  renderModalContent();
+}
+
+function closeMenuModal() {
+  document.getElementById('menu-modal').classList.add('hidden');
+}
+
+function setModalTab(tab) {
+  S.modalTab = tab;
+  const active = 'flex-1 py-2.5 text-sm font-bold text-amber-600 border-b-2 border-amber-400 transition';
+  const inact  = 'flex-1 py-2.5 text-sm font-bold text-gray-400 border-b-2 border-transparent transition';
+  document.getElementById('modal-tab-list').className = tab === 'list' ? active : inact;
+  document.getElementById('modal-tab-add').className  = tab === 'add'  ? active : inact;
+  renderModalContent();
+}
+
+function renderModalContent() {
+  const el = document.getElementById('modal-content'); if (!el) return;
+  el.innerHTML = S.modalTab === 'list' ? renderModalList() : renderModalAddForm();
+}
+
+function renderModalList() {
+  const { overrides = {}, hidden = [], customItems = [] } = S.menuChanges;
+  const menu = BASE_MENU;
+
+  const catHTML = menu.map(cat => {
+    const items = cat.items.map(item => {
+      const eff = overrides[item.id] ? { ...item, ...overrides[item.id] } : item;
+      const isHidden = hidden.includes(item.id);
+      const isEditing = S.editingItemId === item.id;
+
+      const editForm = isEditing ? `
+        <div class="mt-3 pt-3 border-t border-amber-100 space-y-2" onclick="event.stopPropagation()">
+          <div class="flex gap-2">
+            <input id="edit-emoji-${item.id}" value="${eff.emoji || '🍞'}" maxlength="4"
+              class="w-14 border-2 border-amber-200 rounded-xl px-2 py-2 text-center text-xl focus:outline-none focus:border-amber-400">
+            <input id="edit-name-${item.id}" value="${eff.name}" placeholder="이름"
+              class="flex-1 border-2 border-amber-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-400">
+          </div>
+          <div class="flex gap-2 items-center">
+            <input id="edit-price-${item.id}" type="number" value="${eff.price}" placeholder="가격"
+              class="flex-1 border-2 border-amber-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-400">
+            <span class="text-sm text-gray-400 font-bold flex-shrink-0">원</span>
+          </div>
+          <input id="edit-desc-${item.id}" value="${eff.desc || ''}" placeholder="설명 (선택)"
+            class="w-full border-2 border-amber-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-400">
+          <div class="flex gap-2">
+            <button onclick="saveItemEdit('${item.id}')"
+              class="flex-1 bg-amber-400 hover:bg-amber-500 text-white font-black py-2 rounded-xl text-sm transition">저장</button>
+            <button onclick="cancelEdit()"
+              class="px-4 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-2 rounded-xl text-sm transition">취소</button>
+            ${overrides[item.id] ? `<button onclick="resetItem('${item.id}')" class="px-3 bg-red-50 hover:bg-red-100 text-red-400 font-bold py-2 rounded-xl text-xs transition">원복</button>` : ''}
+          </div>
+        </div>` : '';
+
+      return `
+        <div class="flex items-center gap-2 py-2.5 border-b border-gray-50 last:border-0 ${isHidden ? 'hidden-item' : ''}">
+          <span class="text-xl w-7 text-center flex-shrink-0">${eff.emoji || '🍞'}</span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span class="text-sm font-bold text-gray-800 ${isHidden ? 'line-through' : ''}">${eff.name}</span>
+              ${overrides[item.id] ? '<span class="tag-badge bg-blue-100 text-blue-500">수정됨</span>' : ''}
+            </div>
+            <span class="text-xs text-amber-500 font-bold">${fmt(eff.price)}</span>
+            ${isEditing ? editForm : ''}
+          </div>
+          ${!isEditing ? `
+            <button onclick="startEdit('${item.id}')"
+              class="flex-shrink-0 text-xs bg-gray-100 hover:bg-amber-100 text-gray-500 hover:text-amber-700 px-2.5 py-1.5 rounded-lg font-bold transition">수정</button>
+            <button onclick="toggleHide('${item.id}')"
+              class="flex-shrink-0 text-xs px-2.5 py-1.5 rounded-lg font-bold transition ${isHidden ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-400'}">
+              ${isHidden ? '보이기' : '숨기기'}
+            </button>` : ''}
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="mb-1">
+        <div class="px-5 py-2 bg-amber-50 text-xs font-black text-amber-700 uppercase tracking-wide">${cat.name}</div>
+        <div class="px-5">${items}</div>
+      </div>`;
+  }).join('');
+
+  // Custom items
+  const customHTML = customItems.length > 0 ? `
+    <div class="mb-1">
+      <div class="px-5 py-2 bg-green-50 text-xs font-black text-green-700 uppercase tracking-wide">➕ 사용자 추가 메뉴</div>
+      <div class="px-5">${customItems.map(item => `
+        <div class="flex items-center gap-2 py-2.5 border-b border-gray-50 last:border-0">
+          <span class="text-xl w-7 text-center flex-shrink-0">${item.emoji || '🍞'}</span>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-bold text-gray-800">${item.name}</div>
+            <span class="text-xs text-amber-500 font-bold">${fmt(item.price)}</span>
+            <span class="text-xs text-gray-400 ml-1">${BASE_MENU.find(c=>c.id===item.catId)?.name || item.catId}</span>
+          </div>
+          <button onclick="removeCustomItem('${item.id}')"
+            class="flex-shrink-0 text-xs bg-red-50 hover:bg-red-100 text-red-400 px-2.5 py-1.5 rounded-lg font-bold transition">삭제</button>
+        </div>`).join('')}
+      </div>
+    </div>` : '';
+
+  const hiddenCount = hidden.length;
+  const modifiedCount = Object.keys(S.menuChanges.overrides || {}).length;
+  const customCount = customItems.length;
+
+  return `
+    <div class="px-5 py-3 bg-gray-50 flex gap-3 text-xs text-gray-500">
+      <span>숨김: <b class="text-gray-700">${hiddenCount}</b>개</span>
+      <span>수정: <b class="text-gray-700">${modifiedCount}</b>개</span>
+      <span>추가: <b class="text-gray-700">${customCount}</b>개</span>
+      ${(hiddenCount + modifiedCount + customCount > 0) ? `<button onclick="resetAllMenu()" class="ml-auto text-red-400 hover:text-red-600 font-bold transition">전체 초기화</button>` : ''}
+    </div>
+    ${customHTML}
+    ${catHTML}`;
+}
+
+function renderModalAddForm() {
+  const catOptions = BASE_MENU.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  return `
+    <div class="p-5 space-y-4">
+      <p class="text-xs text-gray-400">새로운 메뉴를 추가하면 방 안의 모든 사람에게 공유됩니다.</p>
+      <div class="flex gap-3">
+        <div>
+          <label class="block text-xs font-bold text-gray-500 mb-1">이모지</label>
+          <input id="add-emoji" value="🍞" maxlength="4"
+            class="w-16 border-2 border-amber-100 rounded-2xl px-2 py-3 text-center text-2xl focus:outline-none focus:border-amber-400">
+        </div>
+        <div class="flex-1">
+          <label class="block text-xs font-bold text-gray-500 mb-1">메뉴 이름 <span class="text-red-400">*</span></label>
+          <input id="add-name" type="text" placeholder="예) 새우바게트" maxlength="30"
+            class="w-full border-2 border-amber-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-amber-400">
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-500 mb-1">가격 <span class="text-red-400">*</span></label>
+        <div class="relative">
+          <input id="add-price" type="number" placeholder="3000" min="0" step="100"
+            class="w-full border-2 border-amber-100 rounded-2xl px-4 py-3 pr-10 text-sm focus:outline-none focus:border-amber-400">
+          <span class="absolute right-4 top-1/2 -translate-y-1/2 text-amber-500 font-bold text-sm">원</span>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-500 mb-1">카테고리</label>
+        <select id="add-category"
+          class="w-full border-2 border-amber-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-amber-400 bg-white">
+          ${catOptions}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-500 mb-1">설명 <span class="text-gray-300">(선택)</span></label>
+        <input id="add-desc" type="text" placeholder="간단한 설명" maxlength="40"
+          class="w-full border-2 border-amber-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-amber-400">
+      </div>
+      <p id="add-error" class="text-red-400 text-xs font-bold hidden"></p>
+      <button onclick="submitAddItem()"
+        class="w-full bg-amber-400 hover:bg-amber-500 active:bg-amber-600 text-white font-black py-4 rounded-2xl text-base transition shadow-md shadow-amber-200">
+        ✅ 메뉴 추가하기
+      </button>
+    </div>`;
+}
+
+// ==================== MENU EDIT ACTIONS ====================
+function startEdit(itemId) {
+  S.editingItemId = itemId;
+  renderModalContent();
+  setTimeout(() => { const el = document.getElementById(`edit-name-${itemId}`); if (el) el.focus(); }, 50);
+}
+
+function cancelEdit() {
+  S.editingItemId = null;
+  renderModalContent();
+}
+
+function saveItemEdit(itemId) {
+  const name  = document.getElementById(`edit-name-${itemId}`)?.value.trim();
+  const price = parseInt(document.getElementById(`edit-price-${itemId}`)?.value) || 0;
+  const emoji = document.getElementById(`edit-emoji-${itemId}`)?.value.trim() || '🍞';
+  const desc  = document.getElementById(`edit-desc-${itemId}`)?.value.trim() || '';
+  if (!name) { toast('이름을 입력해주세요'); return; }
+  if (!S.menuChanges.overrides) S.menuChanges.overrides = {};
+  S.menuChanges.overrides[itemId] = { name, price, emoji, desc };
+  S.editingItemId = null;
+  pushMenuChange();
+  renderMenuList();
+  renderFriendsList();
+  renderModalContent();
+  toast('✅ 수정 완료!');
+}
+
+function resetItem(itemId) {
+  delete S.menuChanges.overrides[itemId];
+  S.editingItemId = null;
+  pushMenuChange();
+  renderMenuList();
+  renderModalContent();
+}
+
+function toggleHide(itemId) {
+  if (!S.menuChanges.hidden) S.menuChanges.hidden = [];
+  const idx = S.menuChanges.hidden.indexOf(itemId);
+  if (idx >= 0) S.menuChanges.hidden.splice(idx, 1);
+  else S.menuChanges.hidden.push(itemId);
+  // Remove from selections if hidden
+  if (S.menuChanges.hidden.includes(itemId) && S.myItems[itemId]) {
+    delete S.myItems[itemId];
+    wsend({ type: 'updateItems', items: S.myItems });
+    renderBudgetBar();
+  }
+  pushMenuChange();
+  renderMenuList();
+  renderCategoryFilters();
+  renderModalContent();
+}
+
+function removeCustomItem(itemId) {
+  if (!S.menuChanges.customItems) S.menuChanges.customItems = [];
+  S.menuChanges.customItems = S.menuChanges.customItems.filter(i => i.id !== itemId);
+  if (S.myItems[itemId]) { delete S.myItems[itemId]; wsend({ type: 'updateItems', items: S.myItems }); renderBudgetBar(); }
+  pushMenuChange();
+  renderMenuList();
+  renderCategoryFilters();
+  renderModalContent();
+}
+
+function resetAllMenu() {
+  if (!confirm('모든 메뉴 변경사항을 초기화할까요?')) return;
+  S.menuChanges = { customItems: [], overrides: {}, hidden: [] };
+  S.editingItemId = null;
+  pushMenuChange();
+  renderAll();
+  renderCategoryFilters();
+  renderModalContent();
+  toast('메뉴가 초기화되었어요');
+}
+
+function submitAddItem() {
+  const name     = document.getElementById('add-name')?.value.trim();
+  const price    = parseInt(document.getElementById('add-price')?.value) || 0;
+  const emoji    = document.getElementById('add-emoji')?.value.trim() || '🍞';
+  const catId    = document.getElementById('add-category')?.value;
+  const desc     = document.getElementById('add-desc')?.value.trim() || '';
+  const errEl    = document.getElementById('add-error');
+
+  if (!name) { errEl.textContent = '메뉴 이름을 입력해주세요'; errEl.classList.remove('hidden'); return; }
+  if (price <= 0) { errEl.textContent = '가격을 입력해주세요'; errEl.classList.remove('hidden'); return; }
+  errEl.classList.add('hidden');
+
+  const newItem = { id: 'custom-' + genId(), catId, name, price, emoji, desc };
+  if (!S.menuChanges.customItems) S.menuChanges.customItems = [];
+  S.menuChanges.customItems.push(newItem);
+  pushMenuChange();
+  renderMenuList();
+  renderCategoryFilters();
+  toast(`✅ "${name}" 추가 완료!`);
+  setModalTab('list');
+}
+
+// ==================== TOAST ====================
+function toast(msg) {
+  const el = document.createElement('div');
+  el.className = 'bg-gray-800/90 text-white text-sm font-bold px-5 py-2.5 rounded-full shadow-lg backdrop-blur-sm transition-all duration-300';
+  el.textContent = msg;
+  el.style.cssText = 'opacity:0;transform:translateY(8px)';
+  document.getElementById('toast-container').appendChild(el);
+  requestAnimationFrame(() => { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; });
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 2500);
+}
+
+// ==================== INIT ====================
+const hashCode = location.hash.replace('#', '').trim();
+if (hashCode && /^[A-Z0-9]{4,6}$/i.test(hashCode)) {
+  document.getElementById('input-roomcode').value = hashCode.toUpperCase();
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !document.getElementById('landing-screen').classList.contains('hidden')) {
+    document.getElementById('input-roomcode').value.trim() ? joinRoom() : createRoom();
+  }
+});
+</script>
+</body>
+</html>
