@@ -462,7 +462,7 @@ function onServerMsg(msg) {
       let restored = false;
       for (const [uid, u] of Object.entries(msg.room.users)) {
         if (uid !== S.myId) {
-          S.friends[uid] = { ...u };
+          S.friends[uid] = { ...u, isOnline: true };
         } else if (u.items && Object.keys(u.items).length > 0) {
           S.myItems = u.items;
           restored = true;
@@ -475,7 +475,10 @@ function onServerMsg(msg) {
     }
     case 'userJoined':
       if (msg.userId !== S.myId) {
-        S.friends[msg.userId] = { ...msg.user };
+        for (const [uid, u] of Object.entries(S.friends)) {
+          if (u.name === msg.user.name && u.isOnline === false) delete S.friends[uid];
+        }
+        S.friends[msg.userId] = { ...msg.user, isOnline: true };
         renderAll();
         toast(`${msg.user.name}님이 참여했어요! 👋`);
       }
@@ -488,7 +491,7 @@ function onServerMsg(msg) {
       break;
     case 'userLeft': {
       const name = S.friends[msg.userId]?.name;
-      delete S.friends[msg.userId];
+      if (S.friends[msg.userId]) S.friends[msg.userId].isOnline = false;
       renderAll();
       if (name) toast(`${name}님이 나갔어요`);
       break;
@@ -553,7 +556,7 @@ function renderAll() {
 
 function renderUsersAvatars() {
   const el = document.getElementById('users-avatars'); if (!el) return;
-  const all = [{ name: S.myName }, ...Object.values(S.friends).map(u => ({ name: u.name }))];
+  const all = [{ name: S.myName }, ...Object.values(S.friends).filter(u => u.isOnline !== false).map(u => ({ name: u.name }))];
   el.innerHTML = all.map(u => avatar(u.name)).join('');
 }
 
@@ -685,13 +688,14 @@ function renderFriendsList() {
     }).join('');
 
     return `
-      <div class="bg-white rounded-2xl p-4 shadow-sm border-2 ${user.isMe ? 'border-amber-200' : 'border-transparent'}">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border-2 ${user.isMe ? 'border-amber-200' : user.isOnline === false ? 'border-gray-100 opacity-60' : 'border-transparent'}">
         <div class="flex items-center gap-3 mb-3">
           ${avatar(user.name, 'w-10 h-10', 'text-base')}
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
               <span class="font-black text-gray-800 text-sm">${user.name}</span>
               ${user.isMe ? '<span class="text-xs bg-amber-100 text-amber-700 px-2 py-px rounded-full font-black">나</span>' : ''}
+              ${!user.isMe && user.isOnline === false ? '<span class="text-xs bg-gray-100 text-gray-400 px-2 py-px rounded-full font-black">나감</span>' : ''}
             </div>
             <div class="text-xs text-gray-400 mt-0.5">${selectedItems.length}개 선택</div>
           </div>
