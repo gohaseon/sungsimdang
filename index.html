@@ -144,7 +144,17 @@
 
   <!-- Menu Panel -->
   <div id="panel-menu" class="flex-1 flex flex-col overflow-hidden">
-    <div class="bg-amber-50 px-4 py-3 flex-shrink-0">
+    <div class="bg-amber-50 px-4 pt-3 pb-2 flex-shrink-0">
+      <div class="relative">
+        <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-300 text-sm pointer-events-none">🔍</span>
+        <input id="menu-search" type="text" placeholder="메뉴 검색..."
+          oninput="setSearch(this.value)"
+          class="w-full bg-white border-2 border-amber-100 rounded-2xl pl-9 pr-9 py-2.5 text-sm focus:outline-none focus:border-amber-400 transition">
+        <button id="search-clear" onclick="clearSearch()"
+          class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 text-xl leading-none hidden transition">×</button>
+      </div>
+    </div>
+    <div class="bg-amber-50 px-4 pb-3 flex-shrink-0">
       <div id="category-filters" class="flex gap-2 overflow-x-auto no-scrollbar pb-0.5"></div>
     </div>
     <div id="menu-list" class="flex-1 overflow-y-auto px-4 pb-6 space-y-6 pt-2"></div>
@@ -361,8 +371,9 @@ const S = {
   myId: null, myName: null, myBudget: 0,
   roomCode: null, myItems: {}, friends: {},
   ws: null, tab: 'menu', category: 'all',
+  searchQuery: '',
   menuChanges: { customItems: [], overrides: {}, hidden: [] },
-  editingItemId: null,   // in modal
+  editingItemId: null,
   modalTab: 'list',
 };
 
@@ -392,6 +403,7 @@ function getEffectiveItemMap() {
 
 // ==================== UTILS ====================
 const fmt = n => (n || 0).toLocaleString('ko-KR') + '원';
+const fmtPrice = p => (p != null && p > 0) ? p.toLocaleString('ko-KR') + '원' : '-';
 
 function calcTotal(items) {
   const imap = getEffectiveItemMap();
@@ -574,13 +586,25 @@ function renderCategoryFilters() {
 function renderMenuList() {
   const el = document.getElementById('menu-list'); if (!el) return;
   const menu = getEffectiveMenu();
-  const cats = S.category === 'all' ? menu : menu.filter(c => c.id === S.category);
+  let cats;
+  if (S.searchQuery) {
+    const q = S.searchQuery.toLowerCase();
+    cats = menu.map(cat => ({
+      ...cat,
+      items: cat.items.filter(i => i.name.toLowerCase().includes(q) || (i.desc || '').toLowerCase().includes(q))
+    })).filter(cat => cat.items.length > 0);
+  } else {
+    cats = S.category === 'all' ? menu : menu.filter(c => c.id === S.category);
+  }
+  const emptyMsg = S.searchQuery
+    ? `<div class="text-center text-amber-300 py-10 text-sm">"${S.searchQuery}" 검색 결과가 없어요</div>`
+    : '<div class="text-center text-amber-300 py-10 text-sm">이 카테고리에 메뉴가 없어요<br>메뉴 관리에서 추가해보세요 ✏️</div>';
   el.innerHTML = cats.map(cat => `
     <div>
       <h3 class="font-black text-amber-900 text-sm mb-2.5">${cat.name}</h3>
       <div class="space-y-2">${cat.items.map(renderItemCard).join('')}</div>
     </div>
-  `).join('') || '<div class="text-center text-amber-300 py-10 text-sm">이 카테고리에 메뉴가 없어요<br>메뉴 관리에서 추가해보세요 ✏️</div>';
+  `).join('') || emptyMsg;
 }
 
 function renderItemCard(item) {
@@ -604,7 +628,7 @@ function renderItemCard(item) {
             ${item.desc ? `<span class="text-xs text-amber-500 bg-amber-50 px-2 py-px rounded-full font-bold">${item.desc}</span>` : ''}
           </div>
           <div class="flex items-center gap-2 mt-0.5">
-            <span class="font-black text-amber-500 text-sm">${fmt(item.price)}</span>
+            <span class="font-black text-amber-500 text-sm">${fmtPrice(item.price)}</span>
             ${friendAvatars ? `<div class="flex -space-x-1">${friendAvatars}</div>` : ''}
           </div>
         </div>
@@ -636,6 +660,26 @@ function renderFriendsList() {
     const selectedItems = Object.entries(user.items)
       .filter(([, q]) => q > 0)
       .map(([id, qty]) => ({ ...(imap[id] || BASE_ITEM_MAP[id] || { name: id, price: 0, emoji: '🍞' }), qty }));
+
+    const itemsHTML = selectedItems.map(item => {
+      const subtotal = (item.price && item.price > 0) ? item.price * item.qty : null;
+      if (user.isMe) {
+        return `<div class="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0">
+          <span class="flex-1 text-sm text-gray-700 truncate min-w-0">${item.emoji || '🍞'} ${item.name}</span>
+          <div class="flex items-center gap-1.5 flex-shrink-0">
+            <button onclick="changeQty('${item.id}',-1)" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-red-50 text-gray-500 hover:text-red-400 font-black text-base flex items-center justify-center transition leading-none">−</button>
+            <span class="font-black text-gray-700 text-xs w-4 text-center">${item.qty}</span>
+            <button onclick="changeQty('${item.id}',1)" class="w-7 h-7 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-700 font-black text-base flex items-center justify-center transition leading-none">+</button>
+            <span class="font-bold text-amber-600 text-sm w-14 text-right flex-shrink-0">${subtotal !== null ? fmtPrice(subtotal) : '-'}</span>
+          </div>
+        </div>`;
+      }
+      return `<div class="flex items-center justify-between text-sm py-0.5">
+        <span class="text-gray-600 truncate">${item.emoji || '🍞'} ${item.name} <span class="text-gray-400 font-bold">× ${item.qty}</span></span>
+        <span class="font-bold text-amber-600 flex-shrink-0 ml-2">${subtotal !== null ? fmtPrice(subtotal) : '-'}</span>
+      </div>`;
+    }).join('');
+
     return `
       <div class="bg-white rounded-2xl p-4 shadow-sm border-2 ${user.isMe ? 'border-amber-200' : 'border-transparent'}">
         <div class="flex items-center gap-3 mb-3">
@@ -654,12 +698,7 @@ function renderFriendsList() {
         </div>
         ${user.budget > 0 ? `<div class="bg-gray-100 rounded-full h-1.5 mb-3 overflow-hidden"><div class="h-full rounded-full transition-all duration-500 ${over ? 'bg-red-400' : 'bg-amber-400'}" style="width:${pct}%"></div></div>` : ''}
         ${selectedItems.length > 0
-          ? `<div class="space-y-1.5">${selectedItems.map(item => `
-               <div class="flex items-center justify-between text-sm">
-                 <span class="text-gray-600">${item.emoji || '🍞'} ${item.name} <span class="text-gray-400 font-bold">× ${item.qty}</span></span>
-                 <span class="font-bold text-amber-600 flex-shrink-0 ml-2">${fmt(item.price * item.qty)}</span>
-               </div>`).join('')}
-             </div>`
+          ? `<div>${itemsHTML}</div>`
           : `<div class="text-center text-gray-300 text-sm py-1">아직 선택한 빵이 없어요</div>`
         }
       </div>`;
@@ -701,6 +740,19 @@ function setTab(tab) {
 
 function setCategory(id) {
   S.category = id; renderCategoryFilters(); renderMenuList();
+}
+
+function setSearch(query) {
+  S.searchQuery = query.trim();
+  document.getElementById('search-clear').classList.toggle('hidden', !S.searchQuery);
+  renderMenuList();
+}
+
+function clearSearch() {
+  S.searchQuery = '';
+  document.getElementById('menu-search').value = '';
+  document.getElementById('search-clear').classList.add('hidden');
+  renderMenuList();
 }
 
 function copyShareLink() {
@@ -849,9 +901,9 @@ function renderModalAddForm() {
         </div>
       </div>
       <div>
-        <label class="block text-xs font-bold text-gray-500 mb-1">가격 <span class="text-red-400">*</span></label>
+        <label class="block text-xs font-bold text-gray-500 mb-1">가격 <span class="text-gray-300">(선택 · 없으면 - 로 표시)</span></label>
         <div class="relative">
-          <input id="add-price" type="number" placeholder="3000" min="0" step="100"
+          <input id="add-price" type="number" placeholder="미입력 가능" min="0" step="100"
             class="w-full border-2 border-amber-100 rounded-2xl px-4 py-3 pr-10 text-sm focus:outline-none focus:border-amber-400">
           <span class="absolute right-4 top-1/2 -translate-y-1/2 text-amber-500 font-bold text-sm">원</span>
         </div>
@@ -951,15 +1003,14 @@ function resetAllMenu() {
 }
 
 function submitAddItem() {
-  const name     = document.getElementById('add-name')?.value.trim();
-  const price    = parseInt(document.getElementById('add-price')?.value) || 0;
-  const emoji    = document.getElementById('add-emoji')?.value.trim() || '🍞';
-  const catId    = document.getElementById('add-category')?.value;
-  const desc     = document.getElementById('add-desc')?.value.trim() || '';
-  const errEl    = document.getElementById('add-error');
+  const name  = document.getElementById('add-name')?.value.trim();
+  const price = parseInt(document.getElementById('add-price')?.value) || 0;
+  const emoji = document.getElementById('add-emoji')?.value.trim() || '🍞';
+  const catId = document.getElementById('add-category')?.value;
+  const desc  = document.getElementById('add-desc')?.value.trim() || '';
+  const errEl = document.getElementById('add-error');
 
   if (!name) { errEl.textContent = '메뉴 이름을 입력해주세요'; errEl.classList.remove('hidden'); return; }
-  if (price <= 0) { errEl.textContent = '가격을 입력해주세요'; errEl.classList.remove('hidden'); return; }
   errEl.classList.add('hidden');
 
   const newItem = { id: 'custom-' + genId(), catId, name, price, emoji, desc };
