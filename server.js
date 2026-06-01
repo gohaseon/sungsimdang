@@ -1,6 +1,8 @@
 const express = require('express');
 const WebSocket = require('ws');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
@@ -8,8 +10,10 @@ const wss = new WebSocket.Server({ server });
 
 app.use(express.static(__dirname));
 
-// ==================== REDIS ====================
+// ==================== STORAGE (Redis 우선, 없으면 로컬 JSON 파일) ====================
 let redis = null;
+const LOCAL_DATA_FILE = path.join(__dirname, '.room-data.json');
+
 try {
   if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
     const { Redis } = require('@upstash/redis');
@@ -19,26 +23,51 @@ try {
     });
     console.log('✅ Redis 연결됨 (7일 데이터 보관)');
   } else {
-    console.log('⚠️  Redis 미설정 → 인메모리 모드 (서버 재시작 시 초기화)');
+    console.log('⚠️  Redis 미설정 → 로컬 파일 모드 (.room-data.json)');
   }
 } catch (e) {
   console.error('Redis 초기화 실패:', e.message);
 }
 
-const TTL = 7 * 24 * 60 * 60; // 7일 (초)
+const TTL = 7 * 24 * 60 * 60; // 7일
+
+// 로컬 파일 읽기/쓰기
+function fileGet(key) {
+  try {
+    const data = JSON.parse(fs.readFileSync(LOCAL_DATA_FILE, 'utf8'));
+    const entry = data[key];
+    if (!entry) return null;
+    // TTL 체크 (7일 초과 시 무효)
+    if (Date.now() - entry.ts > TTL * 1000) return null;
+    return entry.value;
+  } catch { return null; }
+}
+
+function fileSet(key, value) {
+  try {
+    let data = {};
+    try { data = JSON.parse(fs.readFileSync(LOCAL_DATA_FILE, 'utf8')); } catch {}
+    data[key] = { value, ts: Date.now() };
+    fs.writeFileSync(LOCAL_DATA_FILE, JSON.stringify(data));
+  } catch (e) { console.error('파일 저장 오류:', e.message); }
+}
 
 async function rGet(key) {
-  if (!redis) return null;
-  try { return await redis.get(key); } catch { return null; }
+  if (redis) {
+    try { return await redis.get(key); } catch { return null; }
+  }
+  return fileGet(key);
 }
 
 async function rSet(key, value) {
-  if (!redis) return;
-  try { await redis.set(key, value, { ex: TTL }); } catch (e) { console.error('Redis set error:', e.message); }
+  if (redis) {
+    try { await redis.set(key, value, { ex: TTL }); } catch (e) { console.error('Redis set error:', e.message); }
+    return;
+  }
+  fileSet(key, value);
 }
 
 // ==================== IN-MEMORY ROOMS ====================
-// rooms: { [roomCode]: { users: { [userId]: { name, budget, items } }, menu, _menuLoaded } }
 const rooms = {};
 const clientMeta = new Map();
 
@@ -67,8 +96,9 @@ function send(ws, data) {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
 }
 
-// 빠른 클릭 시 Redis 과호출 방지용 디바운스
+// 빠른 클릭 시 과호출 방지 디바운스
 const saveTimers = new Map();
+
 function scheduleBasketSave(roomCode, userId) {
   const key = `${roomCode}:${userId}`;
   if (saveTimers.has(key)) clearTimeout(saveTimers.get(key));
@@ -77,6 +107,16 @@ function scheduleBasketSave(roomCode, userId) {
     const user = rooms[roomCode]?.users[userId];
     if (user) await rSet(`basket:${roomCode}:${user.name}`, user.items);
   }, 800));
+}
+
+async function flushBasketSave(roomCode, userId) {
+  const key = `${roomCode}:${userId}`;
+  if (saveTimers.has(key)) {
+    clearTimeout(saveTimers.get(key));
+    saveTimers.delete(key);
+  }
+  const user = rooms[roomCode]?.users[userId];
+  if (user) await rSet(`basket:${roomCode}:${user.name}`, user.items);
 }
 
 // ==================== WEBSOCKET ====================
@@ -95,14 +135,14 @@ wss.on('connection', (ws) => {
         meta.userId = userId;
         const room = ensureRoom(roomCode);
 
-        // 첫 접속 시 Redis에서 메뉴 불러오기
+        // 첫 접속 시 저장된 메뉴 불러오기
         if (!room._menuLoaded) {
           const savedMenu = await rGet(`menu:${roomCode}`);
           if (savedMenu) room.menu = savedMenu;
           room._menuLoaded = true;
         }
 
-        // Redis에서 이 사람의 장바구니 불러오기
+        // 저장된 장바구니 불러오기
         const savedItems = await rGet(`basket:${roomCode}:${name}`);
         room.users[userId] = { name, budget, items: savedItems ?? {} };
 
@@ -141,19 +181,24 @@ wss.on('connection', (ws) => {
     }
   });
 
-  ws.on('close', () => {
-    const { roomCode, userId } = clientMeta.get(ws) || {};
-    if (roomCode && userId && rooms[roomCode]) {
-      delete rooms[roomCode].users[userId];
-      broadcastToRoom(roomCode, ws, { type: 'userLeft', userId });
-      if (Object.keys(rooms[roomCode].users).length === 0) delete rooms[roomCode];
+  ws.on('close', async () => {
+    try {
+      const { roomCode, userId } = clientMeta.get(ws) || {};
+      if (roomCode && userId && rooms[roomCode]) {
+        // 디바운스 대기 중인 저장이 있으면 즉시 실행
+        await flushBasketSave(roomCode, userId);
+        delete rooms[roomCode].users[userId];
+        broadcastToRoom(roomCode, ws, { type: 'userLeft', userId });
+        if (Object.keys(rooms[roomCode].users).length === 0) delete rooms[roomCode];
+      }
+      clientMeta.delete(ws);
+    } catch (err) {
+      console.error('Close handler error:', err);
     }
-    clientMeta.delete(ws);
   });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🍞 성심당 서버 실행 중: http://localhost:${PORT}`);
-  console.log('   친구에게 링크를 공유하세요!');
 });
