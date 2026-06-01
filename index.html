@@ -442,14 +442,22 @@ function wsend(data) {
 
 function onServerMsg(msg) {
   switch (msg.type) {
-    case 'state':
+    case 'state': {
       S.friends = {};
+      let restored = false;
       for (const [uid, u] of Object.entries(msg.room.users)) {
-        if (uid !== S.myId) S.friends[uid] = { ...u };
+        if (uid !== S.myId) {
+          S.friends[uid] = { ...u };
+        } else if (u.items && Object.keys(u.items).length > 0) {
+          S.myItems = u.items;
+          restored = true;
+        }
       }
       if (msg.room.menu) S.menuChanges = msg.room.menu;
       renderAll();
+      if (restored) toast('🛒 이전 장바구니를 불러왔어요!');
       break;
+    }
     case 'userJoined':
       if (msg.userId !== S.myId) {
         S.friends[msg.userId] = { ...msg.user };
