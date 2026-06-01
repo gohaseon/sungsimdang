@@ -142,6 +142,10 @@
         친구들 장바구니
         <span id="friends-badge" class="bg-amber-100 text-amber-700 text-xs font-black px-2 py-0.5 rounded-full hidden">0</span>
       </button>
+      <button id="tab-purchase" onclick="setTab('purchase')"
+        class="flex-1 py-3 text-sm font-bold border-b-2 text-gray-400 border-transparent transition">
+        구매 목록
+      </button>
     </div>
   </div>
 
@@ -161,12 +165,22 @@
       <div id="category-filters" class="flex gap-2 overflow-x-auto no-scrollbar pb-0.5"></div>
     </div>
     <div id="menu-list" class="flex-1 overflow-y-auto px-4 pb-6 space-y-6 pt-2"></div>
+    <div id="cart-bar" class="hidden flex-shrink-0 px-4 pb-3 bg-amber-50">
+      <button onclick="openCartSheet()"
+        class="w-full bg-amber-400 hover:bg-amber-500 active:bg-amber-600 text-white rounded-2xl p-3.5 flex items-center justify-between shadow-md shadow-amber-200 transition">
+        <span class="font-bold text-sm">🛒 <span id="cart-bar-count"></span>개 선택</span>
+        <span id="cart-bar-total" class="font-black text-base"></span>
+      </button>
+    </div>
   </div>
 
   <!-- Friends Panel -->
   <div id="panel-friends" class="hidden flex-1 overflow-y-auto">
     <div id="friends-list" class="p-4 space-y-3"></div>
   </div>
+
+  <!-- Purchase Panel -->
+  <div id="panel-purchase" class="hidden flex-1 overflow-y-auto"></div>
 </div>
 
 <!-- ========== MENU MANAGEMENT MODAL ========== -->
@@ -191,6 +205,24 @@
     </div>
     <!-- Modal content -->
     <div id="modal-content" class="flex-1 overflow-y-auto"></div>
+  </div>
+</div>
+
+<!-- ========== CART SHEET ========== -->
+<div id="cart-sheet" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeCartSheet()"></div>
+  <div class="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl flex flex-col modal-sheet" style="max-height:80dvh;">
+    <div class="flex-shrink-0 flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-100">
+      <h2 class="font-black text-gray-800 text-lg">🛒 내 장바구니</h2>
+      <button onclick="closeCartSheet()" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 text-2xl leading-none transition">×</button>
+    </div>
+    <div id="cart-sheet-content" class="flex-1 overflow-y-auto"></div>
+    <div class="flex-shrink-0 px-5 py-4 border-t border-gray-100 bg-white" style="padding-bottom: max(env(safe-area-inset-bottom), 16px);">
+      <div class="flex justify-between items-center">
+        <span class="font-bold text-gray-500 text-sm">합계</span>
+        <span id="cart-sheet-total" class="font-black text-amber-600 text-xl"></span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -484,7 +516,7 @@ function onServerMsg(msg) {
       }
       break;
     case 'itemsUpdated':
-      if (S.friends[msg.userId]) { S.friends[msg.userId].items = msg.items; renderMenuList(); renderFriendsList(); }
+      if (S.friends[msg.userId]) { S.friends[msg.userId].items = msg.items; renderMenuList(); renderFriendsList(); renderPurchaseList(); }
       break;
     case 'budgetUpdated':
       if (S.friends[msg.userId]) { S.friends[msg.userId].budget = msg.budget; renderFriendsList(); }
@@ -552,6 +584,7 @@ function enterRoom(name, budget, roomCode) {
 function renderAll() {
   renderUsersAvatars(); renderBudgetBar();
   renderMenuList(); renderFriendsList(); updateFriendsBadge();
+  updateCartBar(); renderPurchaseList();
 }
 
 function renderUsersAvatars() {
@@ -678,6 +711,7 @@ function renderFriendsList() {
             <span class="font-black text-gray-700 text-xs w-4 text-center">${item.qty}</span>
             <button onclick="changeQty('${item.id}',1)" class="w-7 h-7 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-700 font-black text-base flex items-center justify-center transition leading-none">+</button>
             <span class="font-bold text-amber-600 text-sm w-14 text-right flex-shrink-0">${subtotal !== null ? fmtPrice(subtotal) : '-'}</span>
+            <button onclick="deleteItem('${item.id}')" class="w-7 h-7 rounded-full bg-red-50 hover:bg-red-100 text-red-400 flex items-center justify-center transition text-sm leading-none">🗑</button>
           </div>
         </div>`;
       }
@@ -723,6 +757,7 @@ function updateFriendsBadge() {
 function toggleItem(id) {
   if (S.myItems[id]) delete S.myItems[id]; else S.myItems[id] = 1;
   renderMenuList(); renderBudgetBar(); renderFriendsList();
+  updateCartBar(); renderPurchaseList();
   wsend({ type: 'updateItems', items: S.myItems });
 }
 
@@ -730,6 +765,7 @@ function changeQty(id, delta) {
   const n = (S.myItems[id] || 0) + delta;
   if (n <= 0) delete S.myItems[id]; else S.myItems[id] = Math.min(n, 99);
   renderMenuList(); renderBudgetBar(); renderFriendsList();
+  updateCartBar(); renderPurchaseList();
   wsend({ type: 'updateItems', items: S.myItems });
 }
 
@@ -737,10 +773,12 @@ function setTab(tab) {
   S.tab = tab;
   document.getElementById('panel-menu').classList.toggle('hidden', tab !== 'menu');
   document.getElementById('panel-friends').classList.toggle('hidden', tab !== 'friends');
+  document.getElementById('panel-purchase').classList.toggle('hidden', tab !== 'purchase');
   const active = 'flex-1 py-3 text-sm font-bold border-b-2 text-amber-600 border-amber-400 transition';
   const inact  = 'flex-1 py-3 text-sm font-bold border-b-2 text-gray-400 border-transparent transition flex items-center justify-center gap-1.5';
-  document.getElementById('tab-menu').className    = tab === 'menu'    ? active : inact;
-  document.getElementById('tab-friends').className = tab === 'friends' ? active : inact;
+  document.getElementById('tab-menu').className     = tab === 'menu'     ? active : inact;
+  document.getElementById('tab-friends').className  = tab === 'friends'  ? active : inact;
+  document.getElementById('tab-purchase').className = tab === 'purchase' ? active : inact;
   const badge = document.getElementById('friends-badge');
   if (badge && !document.getElementById('tab-friends').contains(badge))
     document.getElementById('tab-friends').appendChild(badge);
@@ -1071,6 +1109,121 @@ function submitAddItem() {
   renderCategoryFilters();
   toast(`✅ "${name}" 추가 완료!`);
   setModalTab('list');
+}
+
+// ==================== CART SHEET ====================
+function updateCartBar() {
+  const bar = document.getElementById('cart-bar');
+  if (!bar) return;
+  const count = Object.values(S.myItems).reduce((s, q) => s + q, 0);
+  if (count === 0) { bar.classList.add('hidden'); return; }
+  bar.classList.remove('hidden');
+  document.getElementById('cart-bar-count').textContent = count;
+  document.getElementById('cart-bar-total').textContent = fmt(calcTotal(S.myItems)) + ' ›';
+}
+
+function openCartSheet() {
+  renderCartSheet();
+  document.getElementById('cart-sheet').classList.remove('hidden');
+}
+
+function closeCartSheet() {
+  document.getElementById('cart-sheet').classList.add('hidden');
+}
+
+function renderCartSheet() {
+  const el = document.getElementById('cart-sheet-content');
+  const totalEl = document.getElementById('cart-sheet-total');
+  if (!el) return;
+  const imap = getEffectiveItemMap();
+  const items = Object.entries(S.myItems)
+    .filter(([, q]) => q > 0)
+    .map(([id, qty]) => ({ ...(imap[id] || { name: id, price: 0, emoji: '🍞' }), id, qty }));
+  if (totalEl) totalEl.textContent = fmt(calcTotal(S.myItems));
+  if (!items.length) {
+    el.innerHTML = '<div class="text-center text-gray-300 py-10 text-sm">선택한 빵이 없어요</div>';
+    return;
+  }
+  el.innerHTML = `<div class="p-4 space-y-2">${items.map(item => {
+    const subtotal = item.price ? item.price * item.qty : null;
+    return `<div class="flex items-center gap-3 bg-amber-50 rounded-2xl p-3">
+      <span class="text-2xl">${item.emoji || '🍞'}</span>
+      <div class="flex-1 min-w-0">
+        <div class="font-bold text-gray-800 text-sm truncate">${item.name}</div>
+        ${subtotal !== null ? `<div class="text-xs text-amber-500 font-bold">${fmt(subtotal)}</div>` : ''}
+      </div>
+      <div class="flex items-center gap-1.5 flex-shrink-0">
+        <button onclick="cartChangeQty('${item.id}',-1)" class="w-8 h-8 rounded-full bg-white text-amber-700 font-black text-lg flex items-center justify-center hover:bg-amber-100 transition shadow-sm leading-none">−</button>
+        <span class="font-black text-gray-800 text-sm w-5 text-center">${item.qty}</span>
+        <button onclick="cartChangeQty('${item.id}',1)" class="w-8 h-8 rounded-full bg-amber-400 text-white font-black text-lg flex items-center justify-center hover:bg-amber-500 transition leading-none">+</button>
+        <button onclick="deleteItem('${item.id}')" class="w-8 h-8 rounded-full bg-red-50 text-red-400 flex items-center justify-center hover:bg-red-100 transition text-base leading-none">🗑</button>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function cartChangeQty(id, delta) {
+  changeQty(id, delta);
+  renderCartSheet();
+}
+
+function deleteItem(id) {
+  delete S.myItems[id];
+  renderMenuList(); renderBudgetBar(); renderFriendsList();
+  updateCartBar(); renderPurchaseList();
+  renderCartSheet();
+  if (Object.keys(S.myItems).length === 0) closeCartSheet();
+  wsend({ type: 'updateItems', items: S.myItems });
+}
+
+// ==================== PURCHASE LIST ====================
+function renderPurchaseList() {
+  const el = document.getElementById('panel-purchase');
+  if (!el) return;
+  const imap = getEffectiveItemMap();
+  const totals = {};
+  const allUsers = [
+    { name: S.myName, items: S.myItems },
+    ...Object.values(S.friends).map(u => ({ name: u.name, items: u.items || {} }))
+  ];
+  for (const user of allUsers) {
+    for (const [id, qty] of Object.entries(user.items)) {
+      if (qty > 0) {
+        if (!totals[id]) totals[id] = { qty: 0, buyers: [] };
+        totals[id].qty += qty;
+        totals[id].buyers.push(user.name);
+      }
+    }
+  }
+  const entries = Object.entries(totals)
+    .map(([id, data]) => ({ ...(imap[id] || { name: id, price: 0, emoji: '🍞' }), id, ...data }))
+    .filter(i => i.name)
+    .sort((a, b) => b.qty - a.qty);
+  if (!entries.length) {
+    el.innerHTML = '<div class="text-center text-amber-300 py-10 text-sm">아직 선택된 메뉴가 없어요</div>';
+    return;
+  }
+  const totalQty = entries.reduce((s, i) => s + i.qty, 0);
+  const grandTotal = entries.reduce((s, i) => s + (i.price || 0) * i.qty, 0);
+  el.innerHTML = `<div class="p-4 space-y-2">
+    <div class="bg-amber-400 rounded-2xl p-4 mb-2 flex justify-between items-center">
+      <span class="font-black text-white">${entries.length}종류 · 총 ${totalQty}개</span>
+      <span class="font-black text-white text-lg">${fmt(grandTotal)}</span>
+    </div>
+    ${entries.map(item => `<div class="bg-white rounded-2xl p-4 shadow-sm border border-amber-50">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">${item.emoji || '🍞'}</span>
+        <div class="flex-1 min-w-0">
+          <div class="font-bold text-gray-800 text-sm">${item.name}</div>
+          <div class="text-xs text-gray-400 mt-0.5 truncate">${item.buyers.join(', ')}</div>
+        </div>
+        <div class="text-right">
+          <div class="font-black text-amber-600 text-base">${item.qty}개</div>
+          ${item.price ? `<div class="text-xs text-gray-400">${fmt(item.price * item.qty)}</div>` : ''}
+        </div>
+      </div>
+    </div>`).join('')}
+  </div>`;
 }
 
 // ==================== TOAST ====================
