@@ -109,6 +109,9 @@
         <button onclick="openMenuModal()"
           class="w-9 h-9 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center text-base transition active:scale-95"
           title="메뉴 관리">✏️</button>
+        <button onclick="leaveRoom()"
+          class="w-9 h-9 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center text-base transition active:scale-95"
+          title="나가기 (이름 변경)">🚪</button>
       </div>
     </div>
     <!-- Budget bar -->
@@ -530,6 +533,7 @@ function enterRoom(name, budget, roomCode) {
   S.myId = genId(); S.myName = name; S.myBudget = budget;
   S.roomCode = roomCode; S.myItems = {}; S.friends = {};
   S.menuChanges = { customItems: [], overrides: {}, hidden: [] };
+  localStorage.setItem('ss_session', JSON.stringify({ name, budget, roomCode }));
   document.getElementById('landing-screen').classList.add('hidden');
   document.getElementById('main-screen').classList.remove('hidden');
   document.getElementById('room-code-btn').textContent = roomCode;
@@ -753,6 +757,17 @@ function clearSearch() {
   document.getElementById('menu-search').value = '';
   document.getElementById('search-clear').classList.add('hidden');
   renderMenuList();
+}
+
+function leaveRoom() {
+  localStorage.removeItem('ss_session');
+  if (S.ws) S.ws.close();
+  history.replaceState(null, '', location.pathname);
+  document.getElementById('main-screen').classList.add('hidden');
+  document.getElementById('landing-screen').classList.remove('hidden');
+  document.getElementById('input-name').value = S.myName || '';
+  document.getElementById('input-budget').value = S.myBudget || '';
+  document.getElementById('input-roomcode').value = '';
 }
 
 function copyShareLink() {
@@ -1035,10 +1050,25 @@ function toast(msg) {
 }
 
 // ==================== INIT ====================
-const hashCode = location.hash.replace('#', '').trim();
-if (hashCode && /^[A-Z0-9]{4,6}$/i.test(hashCode)) {
-  document.getElementById('input-roomcode').value = hashCode.toUpperCase();
-}
+(function autoRejoin() {
+  const hashCode = location.hash.replace('#', '').trim();
+  const saved = (() => { try { return JSON.parse(localStorage.getItem('ss_session')); } catch { return null; } })();
+
+  // URL hash가 있고 저장된 방코드와 일치하면 자동 입장
+  if (saved && saved.name && saved.roomCode) {
+    const targetRoom = (hashCode && /^[A-Z0-9]{4,6}$/i.test(hashCode))
+      ? hashCode.toUpperCase()
+      : saved.roomCode;
+    enterRoom(saved.name, saved.budget ?? 0, targetRoom);
+    return;
+  }
+
+  // 자동 입장 불가 → 기존 랜딩 화면
+  if (hashCode && /^[A-Z0-9]{4,6}$/i.test(hashCode)) {
+    document.getElementById('input-roomcode').value = hashCode.toUpperCase();
+  }
+})();
+
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !document.getElementById('landing-screen').classList.contains('hidden')) {
     document.getElementById('input-roomcode').value.trim() ? joinRoom() : createRoom();
