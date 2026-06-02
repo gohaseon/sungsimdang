@@ -67,6 +67,34 @@ async function rSet(key, value) {
   fileSet(key, value);
 }
 
+async function getAllSavedBaskets(roomCode) {
+  const prefix = `basket:${roomCode}:`;
+  if (redis) {
+    try {
+      const keys = await redis.keys(`${prefix}*`);
+      const result = {};
+      for (const key of keys) {
+        const value = await redis.get(key);
+        if (value && typeof value === 'object' && Object.keys(value).length > 0)
+          result[key.slice(prefix.length)] = value;
+      }
+      return result;
+    } catch { return {}; }
+  }
+  try {
+    const data = JSON.parse(fs.readFileSync(LOCAL_DATA_FILE, 'utf8'));
+    const result = {};
+    for (const [key, entry] of Object.entries(data)) {
+      if (key.startsWith(prefix) && Date.now() - entry.ts <= TTL * 1000) {
+        const name = key.slice(prefix.length);
+        if (entry.value && Object.keys(entry.value).length > 0)
+          result[name] = entry.value;
+      }
+    }
+    return result;
+  } catch { return {}; }
+}
+
 // ==================== IN-MEMORY ROOMS ====================
 const rooms = {};
 const clientMeta = new Map();
@@ -146,7 +174,16 @@ wss.on('connection', (ws) => {
         const savedItems = await rGet(`basket:${roomCode}:${name}`);
         room.users[userId] = { name, budget, items: savedItems ?? {} };
 
-        send(ws, { type: 'state', room });
+        // 저장된 바구니가 있는 오프라인 유저를 state에 포함
+        const allBaskets = await getAllSavedBaskets(roomCode);
+        const onlineNames = new Set(Object.values(room.users).map(u => u.name));
+        const offlineUsers = {};
+        for (const [savedName, items] of Object.entries(allBaskets)) {
+          if (!onlineNames.has(savedName))
+            offlineUsers[`offline:${savedName}`] = { name: savedName, budget: 0, items, isOnline: false };
+        }
+
+        send(ws, { type: 'state', room: { ...room, users: { ...room.users, ...offlineUsers } } });
         broadcastToRoom(roomCode, ws, { type: 'userJoined', userId, user: room.users[userId] });
 
         // TTL 갱신
@@ -185,7 +222,6 @@ wss.on('connection', (ws) => {
     try {
       const { roomCode, userId } = clientMeta.get(ws) || {};
       if (roomCode && userId && rooms[roomCode]) {
-        // 디바운스 대기 중인 저장이 있으면 즉시 실행
         await flushBasketSave(roomCode, userId);
         delete rooms[roomCode].users[userId];
         broadcastToRoom(roomCode, ws, { type: 'userLeft', userId });

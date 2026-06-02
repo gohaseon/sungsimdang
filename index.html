@@ -501,7 +501,7 @@ function onServerMsg(msg) {
       let restored = false;
       for (const [uid, u] of Object.entries(msg.room.users)) {
         if (uid !== S.myId) {
-          S.friends[uid] = { ...u, isOnline: true };
+          S.friends[uid] = { ...u, isOnline: u.isOnline !== false };
         } else if (u.items && Object.keys(u.items).length > 0) {
           S.myItems = u.items;
           restored = true;
@@ -810,7 +810,7 @@ function clearSearch() {
 
 function leaveRoom() {
   localStorage.removeItem('ss_session');
-  if (S.ws) S.ws.close();
+  if (S.ws) { S.ws.onclose = null; S.ws.close(); S.ws = null; }
   history.replaceState(null, '', location.pathname);
   document.getElementById('main-screen').classList.add('hidden');
   document.getElementById('landing-screen').classList.remove('hidden');
