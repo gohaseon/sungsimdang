@@ -210,6 +210,16 @@
         + 메뉴 추가
       </button>
     </div>
+    <!-- Search bar (list tab only, sticky) -->
+    <div id="modal-search-bar" class="flex-shrink-0 hidden px-4 py-2.5 bg-white border-b border-gray-100">
+      <div class="relative">
+        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-base">🔍</span>
+        <input id="modal-search-input" type="text" placeholder="메뉴 이름으로 검색"
+          oninput="setModalSearch(this.value)"
+          class="w-full pl-8 pr-8 py-2.5 border-2 border-amber-200 rounded-xl text-sm focus:outline-none focus:border-amber-400 bg-gray-50">
+        <button id="modal-search-clear" onclick="setModalSearch('')" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 text-xl leading-none hidden">×</button>
+      </div>
+    </div>
     <!-- Modal content -->
     <div id="modal-content" class="flex-1 overflow-y-auto"></div>
   </div>
@@ -407,6 +417,14 @@ const BASE_MENU = [
 ];
 
 const BASE_ITEM_MAP = Object.fromEntries(BASE_MENU.flatMap(c => c.items).map(i => [i.id, i]));
+const ITEM_CAT_MAP  = Object.fromEntries(BASE_MENU.flatMap(c => c.items.map(i => [i.id, c.id])));
+const CATEGORY_LOCATIONS = {
+  signature:'본점', regular:'본점', loaf:'본점', fried:'본점', pastry:'본점',
+  healthy:'본점', dessert:'본점', traditional:'본점', mealkit:'본점', seasonal:'본점',
+  cake:'부띠끄', roll:'부띠끄', sandwich:'샌드위치 정거장',
+};
+const LOCATIONS = ['본점', '부띠끄', '샌드위치 정거장'];
+const LOCATION_EMOJI = { '본점':'🏠', '부띠끄':'🎂', '샌드위치 정거장':'🥪' };
 
 // ==================== STATE ====================
 const S = {
@@ -417,6 +435,8 @@ const S = {
   menuChanges: { customItems: [], overrides: {}, hidden: [] },
   editingItemId: null,
   modalTab: 'list',
+  purchaseCollapsed: {},
+  modalSearch: '',
 };
 
 // ==================== EFFECTIVE MENU ====================
@@ -437,9 +457,14 @@ function getEffectiveItemMap() {
   const { customItems = [], overrides = {} } = S.menuChanges;
   const map = {};
   for (const [id, item] of Object.entries(BASE_ITEM_MAP)) {
-    map[id] = overrides[id] ? { ...item, ...overrides[id] } : item;
+    const defaultLocation = CATEGORY_LOCATIONS[ITEM_CAT_MAP[id]] || '본점';
+    const override = overrides[id];
+    map[id] = override
+      ? { ...item, ...override, location: override.location || defaultLocation }
+      : { ...item, location: defaultLocation };
   }
-  for (const item of customItems) map[item.id] = item;
+  for (const item of customItems)
+    map[item.id] = { ...item, location: item.location || CATEGORY_LOCATIONS[item.catId] || '본점' };
   return map;
 }
 
@@ -830,15 +855,18 @@ function copyShareLink() {
 // ==================== MENU MANAGEMENT MODAL ====================
 function openMenuModal() {
   S.editingItemId = null;
+  S.modalSearch = '';
   document.getElementById('menu-modal').classList.remove('hidden');
   renderModalContent();
 }
 
 function closeMenuModal() {
+  S.modalSearch = '';
   document.getElementById('menu-modal').classList.add('hidden');
 }
 
 function setModalTab(tab) {
+  S.modalSearch = '';
   S.modalTab = tab;
   const active = 'flex-1 py-2.5 text-sm font-bold text-amber-600 border-b-2 border-amber-400 transition';
   const inact  = 'flex-1 py-2.5 text-sm font-bold text-gray-400 border-b-2 border-transparent transition';
@@ -849,19 +877,47 @@ function setModalTab(tab) {
 
 function renderModalContent() {
   const el = document.getElementById('modal-content'); if (!el) return;
-  el.innerHTML = S.modalTab === 'list' ? renderModalList() : renderModalAddForm();
+  const searchBar = document.getElementById('modal-search-bar');
+  if (S.modalTab === 'list') {
+    if (searchBar) searchBar.classList.remove('hidden');
+    const inp = document.getElementById('modal-search-input');
+    if (inp) inp.value = S.modalSearch;
+    const clr = document.getElementById('modal-search-clear');
+    if (clr) clr.classList.toggle('hidden', !S.modalSearch);
+    el.innerHTML = renderModalList();
+  } else {
+    if (searchBar) searchBar.classList.add('hidden');
+    el.innerHTML = renderModalAddForm();
+  }
+}
+
+function setModalSearch(q) {
+  S.modalSearch = q;
+  const clr = document.getElementById('modal-search-clear');
+  if (clr) clr.classList.toggle('hidden', !q);
+  const el = document.getElementById('modal-content');
+  if (el) el.innerHTML = renderModalList();
 }
 
 function renderModalList() {
   const { overrides = {}, hidden = [], customItems = [] } = S.menuChanges;
   const menu = BASE_MENU;
+  const q = S.modalSearch.trim().toLowerCase();
 
   const catHTML = menu.map(cat => {
-    const items = cat.items.map(item => {
+    const filteredItems = q
+      ? cat.items.filter(item => {
+          const eff = overrides[item.id] ? { ...item, ...overrides[item.id] } : item;
+          return eff.name.toLowerCase().includes(q) || item.id === S.editingItemId;
+        })
+      : cat.items;
+    if (!filteredItems.length) return '';
+    const items = filteredItems.map(item => {
       const eff = overrides[item.id] ? { ...item, ...overrides[item.id] } : item;
       const isHidden = hidden.includes(item.id);
       const isEditing = S.editingItemId === item.id;
 
+      const effLocation = overrides[item.id]?.location || CATEGORY_LOCATIONS[cat.id] || '본점';
       const editForm = isEditing ? `
         <div class="mt-3 pt-3 border-t border-amber-100 space-y-2" onclick="event.stopPropagation()">
           <div class="flex gap-2">
@@ -877,6 +933,9 @@ function renderModalList() {
           </div>
           <input id="edit-desc-${item.id}" value="${eff.desc || ''}" placeholder="설명 (선택)"
             class="w-full border-2 border-amber-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-400">
+          <select id="edit-location-${item.id}" class="w-full border-2 border-amber-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-400 bg-white">
+            ${LOCATIONS.map(l => `<option value="${l}" ${effLocation===l?'selected':''}>${LOCATION_EMOJI[l]} ${l}</option>`).join('')}
+          </select>
           <div class="flex gap-2">
             <button onclick="saveItemEdit('${item.id}')"
               class="flex-1 bg-amber-400 hover:bg-amber-500 text-white font-black py-2 rounded-xl text-sm transition">저장</button>
@@ -915,10 +974,11 @@ function renderModalList() {
   }).join('');
 
   // Custom items
-  const customHTML = customItems.length > 0 ? `
+  const filteredCustom = q ? customItems.filter(i => i.name.toLowerCase().includes(q) || i.id === S.editingItemId) : customItems;
+  const customHTML = filteredCustom.length > 0 ? `
     <div class="mb-1">
       <div class="px-5 py-2 bg-green-50 text-xs font-black text-green-700 uppercase tracking-wide">➕ 사용자 추가 메뉴</div>
-      <div class="px-5">${customItems.map(item => {
+      <div class="px-5">${filteredCustom.map(item => {
         const isEditing = S.editingItemId === item.id;
         const editForm = isEditing ? `
           <div class="mt-2 space-y-2">
@@ -932,6 +992,9 @@ function renderModalList() {
             </div>
             <input id="edit-desc-${item.id}" value="${item.desc || ''}" placeholder="설명 (선택)"
               class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300">
+            <select id="edit-location-${item.id}" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white">
+              ${LOCATIONS.map(l => `<option value="${l}" ${(item.location||CATEGORY_LOCATIONS[item.catId]||'본점')===l?'selected':''}>${LOCATION_EMOJI[l]} ${l}</option>`).join('')}
+            </select>
             <div class="flex gap-2">
               <button onclick="saveItemEdit('${item.id}')" class="flex-1 bg-amber-400 hover:bg-amber-500 text-white font-black rounded-lg py-1.5 text-sm transition">저장</button>
               <button onclick="cancelEdit()" class="px-4 bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold rounded-lg py-1.5 text-sm transition">취소</button>
@@ -961,13 +1024,16 @@ function renderModalList() {
   const modifiedCount = Object.keys(S.menuChanges.overrides || {}).length;
   const customCount = customItems.length;
 
+  const noResults = q && !catHTML.replace(/\s/g,'') && !filteredCustom.length;
+
   return `
-    <div class="px-5 py-3 bg-gray-50 flex gap-3 text-xs text-gray-500">
+    <div class="px-5 py-2 bg-gray-50 flex gap-3 text-xs text-gray-500">
       <span>숨김: <b class="text-gray-700">${hiddenCount}</b>개</span>
       <span>수정: <b class="text-gray-700">${modifiedCount}</b>개</span>
       <span>추가: <b class="text-gray-700">${customCount}</b>개</span>
       ${(hiddenCount + modifiedCount + customCount > 0) ? `<button onclick="resetAllMenu()" class="ml-auto text-red-400 hover:text-red-600 font-bold transition">전체 초기화</button>` : ''}
     </div>
+    ${noResults ? '<div class="text-center text-gray-300 py-10 text-sm">검색 결과가 없어요</div>' : ''}
     ${customHTML}
     ${catHTML}`;
 }
@@ -997,12 +1063,21 @@ function renderModalAddForm() {
           <span class="absolute right-4 top-1/2 -translate-y-1/2 text-amber-500 font-bold text-sm">원</span>
         </div>
       </div>
-      <div>
-        <label class="block text-xs font-bold text-gray-500 mb-1">카테고리</label>
-        <select id="add-category"
-          class="w-full border-2 border-amber-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-amber-400 bg-white">
-          ${catOptions}
-        </select>
+      <div class="flex gap-3">
+        <div class="flex-1">
+          <label class="block text-xs font-bold text-gray-500 mb-1">카테고리</label>
+          <select id="add-category" onchange="updateLocationFromCategory()"
+            class="w-full border-2 border-amber-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-amber-400 bg-white">
+            ${catOptions}
+          </select>
+        </div>
+        <div class="flex-1">
+          <label class="block text-xs font-bold text-gray-500 mb-1">판매 위치</label>
+          <select id="add-location"
+            class="w-full border-2 border-amber-100 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-amber-400 bg-white">
+            ${LOCATIONS.map(l => `<option value="${l}">${LOCATION_EMOJI[l]} ${l}</option>`).join('')}
+          </select>
+        </div>
       </div>
       <div>
         <label class="block text-xs font-bold text-gray-500 mb-1">설명 <span class="text-gray-300">(선택)</span></label>
@@ -1030,23 +1105,24 @@ function cancelEdit() {
 }
 
 function saveItemEdit(itemId) {
-  const name  = document.getElementById(`edit-name-${itemId}`)?.value.trim();
-  const price = parseInt(document.getElementById(`edit-price-${itemId}`)?.value) || 0;
-  const emoji = document.getElementById(`edit-emoji-${itemId}`)?.value.trim() || '🍞';
-  const desc  = document.getElementById(`edit-desc-${itemId}`)?.value.trim() || '';
+  const name     = document.getElementById(`edit-name-${itemId}`)?.value.trim();
+  const price    = parseInt(document.getElementById(`edit-price-${itemId}`)?.value) || 0;
+  const emoji    = document.getElementById(`edit-emoji-${itemId}`)?.value.trim() || '🍞';
+  const desc     = document.getElementById(`edit-desc-${itemId}`)?.value.trim() || '';
+  const location = document.getElementById(`edit-location-${itemId}`)?.value || '본점';
   if (!name) { toast('이름을 입력해주세요'); return; }
-  // customItem이면 직접 수정, 기본 메뉴면 override
   const customIdx = S.menuChanges.customItems.findIndex(i => i.id === itemId);
   if (customIdx >= 0) {
-    S.menuChanges.customItems[customIdx] = { ...S.menuChanges.customItems[customIdx], name, price, emoji, desc };
+    S.menuChanges.customItems[customIdx] = { ...S.menuChanges.customItems[customIdx], name, price, emoji, desc, location };
   } else {
     if (!S.menuChanges.overrides) S.menuChanges.overrides = {};
-    S.menuChanges.overrides[itemId] = { name, price, emoji, desc };
+    S.menuChanges.overrides[itemId] = { name, price, emoji, desc, location };
   }
   S.editingItemId = null;
   pushMenuChange();
   renderMenuList();
   renderFriendsList();
+  renderPurchaseList();
   renderModalContent();
   toast('✅ 수정 완료!');
 }
@@ -1056,6 +1132,7 @@ function resetItem(itemId) {
   S.editingItemId = null;
   pushMenuChange();
   renderMenuList();
+  renderPurchaseList();
   renderModalContent();
 }
 
@@ -1097,6 +1174,12 @@ function resetAllMenu() {
   toast('메뉴가 초기화되었어요');
 }
 
+function updateLocationFromCategory() {
+  const catId = document.getElementById('add-category')?.value;
+  const locEl = document.getElementById('add-location');
+  if (locEl && catId) locEl.value = CATEGORY_LOCATIONS[catId] || '본점';
+}
+
 function submitAddItem() {
   const name  = document.getElementById('add-name')?.value.trim();
   const price = parseInt(document.getElementById('add-price')?.value) || 0;
@@ -1108,7 +1191,8 @@ function submitAddItem() {
   if (!name) { errEl.textContent = '메뉴 이름을 입력해주세요'; errEl.classList.remove('hidden'); return; }
   errEl.classList.add('hidden');
 
-  const newItem = { id: 'custom-' + genId(), catId, name, price, emoji, desc };
+  const location = document.getElementById('add-location')?.value || CATEGORY_LOCATIONS[catId] || '본점';
+  const newItem = { id: 'custom-' + genId(), catId, name, price, emoji, desc, location };
   if (!S.menuChanges.customItems) S.menuChanges.customItems = [];
   S.menuChanges.customItems.push(newItem);
   pushMenuChange();
@@ -1219,6 +1303,17 @@ function deleteItem(id) {
 }
 
 // ==================== PURCHASE LIST ====================
+function togglePurchaseGroup(loc) {
+  S.purchaseCollapsed[loc] = !S.purchaseCollapsed[loc];
+  const collapsed = S.purchaseCollapsed[loc];
+  const group = document.querySelector(`[data-purchase-group="${CSS.escape(loc)}"]`);
+  if (!group) return;
+  const body = group.querySelector('.accordion-body');
+  const chevron = group.querySelector('.accordion-chevron');
+  if (body) body.style.gridTemplateRows = collapsed ? '0fr' : '1fr';
+  if (chevron) chevron.style.transform = `rotate(${collapsed ? '-90' : '0'}deg)`;
+}
+
 function renderPurchaseList() {
   const el = document.getElementById('panel-purchase');
   if (!el) return;
@@ -1238,7 +1333,7 @@ function renderPurchaseList() {
     }
   }
   const entries = Object.entries(totals)
-    .map(([id, data]) => ({ ...(imap[id] || { name: id, price: 0, emoji: '🍞' }), id, ...data }))
+    .map(([id, data]) => ({ ...(imap[id] || { name: id, price: 0, emoji: '🍞', location: '본점' }), id, ...data }))
     .filter(i => i.name)
     .sort((a, b) => b.qty - a.qty);
   if (!entries.length) {
@@ -1247,24 +1342,55 @@ function renderPurchaseList() {
   }
   const totalQty = entries.reduce((s, i) => s + i.qty, 0);
   const grandTotal = entries.reduce((s, i) => s + (i.price || 0) * i.qty, 0);
-  el.innerHTML = `<div class="p-4 space-y-2">
-    <div class="bg-amber-400 rounded-2xl p-4 mb-2 flex justify-between items-center">
+
+  // 위치별 그루핑
+  const grouped = {};
+  for (const item of entries) {
+    const loc = item.location || '본점';
+    if (!grouped[loc]) grouped[loc] = [];
+    grouped[loc].push(item);
+  }
+  const sortedLocs = LOCATIONS.filter(l => grouped[l]);
+
+  const itemCard = item => `<div class="bg-white rounded-2xl p-4 shadow-sm border border-amber-50">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">${item.emoji || '🍞'}</span>
+      <div class="flex-1 min-w-0">
+        <div class="font-bold text-gray-800 text-sm">${item.name}</div>
+        <div class="text-xs text-gray-400 mt-0.5 truncate">${item.buyers.join(', ')}</div>
+      </div>
+      <div class="text-right">
+        <div class="font-black text-amber-600 text-base">${item.qty}개</div>
+        ${item.price ? `<div class="text-xs text-gray-400">${fmt(item.price * item.qty)}</div>` : ''}
+      </div>
+    </div>
+  </div>`;
+
+  el.innerHTML = `<div class="p-4 space-y-4">
+    <div class="bg-amber-400 rounded-2xl p-4 flex justify-between items-center">
       <span class="font-black text-white">${entries.length}종류 · 총 ${totalQty}개</span>
       <span class="font-black text-white text-lg">${fmt(grandTotal)}</span>
     </div>
-    ${entries.map(item => `<div class="bg-white rounded-2xl p-4 shadow-sm border border-amber-50">
-      <div class="flex items-center gap-3">
-        <span class="text-2xl">${item.emoji || '🍞'}</span>
-        <div class="flex-1 min-w-0">
-          <div class="font-bold text-gray-800 text-sm">${item.name}</div>
-          <div class="text-xs text-gray-400 mt-0.5 truncate">${item.buyers.join(', ')}</div>
+    ${sortedLocs.map(loc => {
+      const locItems = grouped[loc];
+      const locQty = locItems.reduce((s, i) => s + i.qty, 0);
+      const locTotal = locItems.reduce((s, i) => s + (i.price || 0) * i.qty, 0);
+      const collapsed = S.purchaseCollapsed[loc];
+      return `<div data-purchase-group="${loc}">
+        <button onclick="togglePurchaseGroup('${loc}')" class="w-full flex items-center justify-between px-1 mb-2 py-1 active:opacity-60 transition-opacity">
+          <span class="font-black text-gray-700 text-sm">${LOCATION_EMOJI[loc]} ${loc}</span>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-400">${locQty}개 · ${fmt(locTotal)}</span>
+            <span class="accordion-chevron text-gray-400 text-xs" style="display:inline-block;transition:transform 0.28s cubic-bezier(.4,0,.2,1);transform:rotate(${collapsed ? '-90' : '0'}deg)">▼</span>
+          </div>
+        </button>
+        <div class="accordion-body" style="display:grid;grid-template-rows:${collapsed ? '0fr' : '1fr'};transition:grid-template-rows 0.28s cubic-bezier(.4,0,.2,1);overflow:hidden;">
+          <div style="overflow:hidden;min-height:0;">
+            <div class="space-y-2 pb-1">${locItems.map(itemCard).join('')}</div>
+          </div>
         </div>
-        <div class="text-right">
-          <div class="font-black text-amber-600 text-base">${item.qty}개</div>
-          ${item.price ? `<div class="text-xs text-gray-400">${fmt(item.price * item.qty)}</div>` : ''}
-        </div>
-      </div>
-    </div>`).join('')}
+      </div>`;
+    }).join('')}
   </div>`;
 }
 
